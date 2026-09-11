@@ -10,8 +10,8 @@ From generic AI anime characters to human-guided, identity-driven gacha characte
 <td align="center"><b>After</b></td>
 </tr>
 <tr>
-<td><img src="assets/before.png" alt="Before: generic fantasy browser-game drift"></td>
-<td><img src="assets/after.png" alt="After: front-facing contemporary gacha standee"></td>
+<td><img src="assets/before.png" alt="Before: generic fantasy browser-game drift" width="420"></td>
+<td><img src="assets/after.png" alt="After: front-facing contemporary gacha standee" width="420"></td>
 </tr>
 <tr>
 <td>Generic fantasy / browser-game drift,<br>3/4 twisted pose,<br>ornament-driven identity</td>
@@ -50,6 +50,10 @@ Human Review
 ```
 
 AI does not automatically decide taste. Human owns selection, rejection, mixing, aesthetics, and the question: “would I pull this character?”
+
+## Human Mix
+
+Mixing is a first-class workflow, not an exception. For example, a human may keep **B's silhouette**, take **D's head identity**, preserve **A's material language**, and introduce **C's fantasy intrusion**. The Skill treats that combination as the approved direction and carries it forward without silently normalizing it.
 
 ## Major design features
 
@@ -113,7 +117,7 @@ The Skill stops after Character Explore until Human selection. After selection i
 
 ## Runtime and boundaries
 
-This package is the reusable Codex Skill layer. It does not bundle the benchmark project's Python Runtime, schemas, policy files, tests, caches, private artifacts, external Agent, server, LLM API wrapper, image API, or ComfyUI pipeline. A host project may provide a local Runtime preflight; the Skill's creative behavior remains usable without copying the entire benchmark repository.
+This package is the reusable Codex Skill layer. It bundles the human-readable Anime Style Constitution and its machine-readable style policy, but does not bundle the benchmark project's Python Runtime, planning schemas, tests, caches, private artifacts, external Agent, server, LLM API wrapper, image API, or ComfyUI pipeline. A host project may provide a local Runtime preflight; the Skill's creative behavior remains usable without copying the entire benchmark repository.
 
 S1 Anime 2D Hard Gate remains the only current visual hard gate. The Commercial Gacha Profile is vocabulary and possibility expansion, not a second gate. After generation, present the image and stop for Human Review; do not automatically redesign, regenerate, optimize, or score commercial appeal.
 
@@ -137,8 +141,13 @@ This project is an independent AI-assisted character-design tool. It is not affi
 anime-character-director/
 ├─ SKILL.md
 ├─ README.md
+├─ LICENSE
 ├─ agents/
 │  └─ openai.yaml
+├─ config/
+│  └─ anime_style_policy.yaml
+├─ docs/
+│  └─ ANIME_STYLE_CONTRACT.md
 ├─ references/
 │  ├─ character-design-guide.md
 │  └─ workflow.md

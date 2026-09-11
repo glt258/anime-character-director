@@ -1,0 +1,43 @@
+version: "1.0.0"
+policy_id: "anime-style-constitution"
+
+anime_gate_version: "2"
+
+core:
+  anime_2d: true
+  user_overridable: false
+  style_core: "high-quality original 2D anime commercial game character design"
+  abstraction: "anime_abstraction_only"
+
+mandatory_positive:
+  - "High-quality original 2D anime commercial game character design, anime abstraction preserved, stylized linework, intentional shape language, readable silhouette, polished 2D game illustration."
+  - "All facial, body, age, maturity, and material differences must be expressed through anime abstraction, stylized proportions, graphic shapes, controlled linework, color design, pose, costume, expression, and non-photographic surface language."
+
+mandatory_negative:
+  - "No photorealism, no semi-realism, no realistic portrait aesthetics, no western realistic concept art, no 3D-render aesthetics, no photographic skin, no pores, no realistic anatomy, no live-action look, no identifiable existing character or artist imitation."
+
+forbidden_modes:
+  - "photoreal"
+  - "semi_real"
+  - "photorealism"
+  - "semi-realism"
+  - "realistic portrait aesthetics"
+  - "realistic_facial_anatomy"
+  - "realistic_skin_rendering"
+  - "3d_render"
+  - "cel_shaded_3d"
+  - "painterly_realism"
+  - "western_realistic_concept_art"
+  - "western realistic concept art"
+  - "3D-render aesthetics"
+
+hard_requirements:
+  - "anime_2d"
+  - "illustrated_2d"
+  - "anime_facial_abstraction"
+  - "non_photoreal_skin"
+  - "non_3d_render"
+
+rules:
+  realism_cannot_satisfy_character_variation: true
+  style_gate_required: true
