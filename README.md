@@ -2,22 +2,95 @@
 
 **A Codex-native Skill for human-guided 2D anime gacha character design and art direction.**
 
-From generic AI anime characters to human-guided, identity-driven gacha character design.
+**From generic AI anime characters to identity-driven contemporary gacha character design.**
+
+## Visual Evolution
+
+The same project evolved through several distinct design failures and corrections. These examples show why Anime Character Director is more than a prompt expander.
 
 <table>
 <tr>
-<td align="center"><b>Before</b></td>
-<td align="center"><b>After</b></td>
+<td align="center"><b>01 · Baseline</b></td>
+<td align="center"><b>02 · Player Appeal V1</b></td>
+<td align="center"><b>03 · Creative V2</b></td>
+<td align="center"><b>04 · Current</b></td>
 </tr>
 <tr>
-<td><img src="assets/before.png" alt="Before: generic fantasy browser-game drift" width="420"></td>
-<td><img src="assets/after.png" alt="After: front-facing contemporary gacha standee" width="420"></td>
+<td><img src="assets/evolution-01-baseline.png" alt="Baseline: occupation-first generic anime character" width="240"></td>
+<td><img src="assets/evolution-02-player-appeal-v1.png" alt="Player appeal V1: premium but generic gacha character" width="240"></td>
+<td><img src="assets/evolution-03-pagegame-drift.png" alt="Creative V2: original premise with pagegame drift" width="240"></td>
+<td><img src="assets/evolution-04-current.png" alt="Current: front-facing contemporary gacha standee" width="240"></td>
 </tr>
 <tr>
-<td>Generic fantasy / browser-game drift,<br>3/4 twisted pose,<br>ornament-driven identity</td>
-<td>Front-facing standee,<br>contemporary gacha design,<br>character-specific visual structure</td>
+<td valign="top"><b>Generic convergence</b><br>Occupation-first design.<br>White-hair + techwear template.<br>Low character fantasy.</td>
+<td valign="top"><b>Player appeal introduced</b><br>Stronger body framing and premium presence.<br>Still generic sci-fi gacha.</td>
+<td valign="top"><b>Creativity unlocked</b><br>Original character premise.<br>But pagegame/MMORPG drift and twisted pose remain.</td>
+<td valign="top"><b>Structure-driven design</b><br>Front-facing standee.<br>Cleaner contemporary gacha language.<br>Structural fantasy design.</td>
 </tr>
 </table>
+
+> **Each failure became a design rule.**
+>
+> Anime Character Director was built by repeatedly identifying why a technically good anime image still failed as a memorable gacha character.
+
+> The goal is not to maximize detail.
+> The goal is to maximize identity.
+
+## What changed?
+
+### 01 → 02: Player appeal
+
+The early system overvalued profession, plausibility and functional clothing.
+
+The first major correction was simple:
+
+**A playable gacha character is not an NPC wearing expensive equipment.**
+
+Player fantasy, attraction, silhouette and emotional appeal became first-class design concerns.
+
+### 02 → 03: Creative freedom
+
+The next problem was AI conservatism.
+
+The system was good at producing coherent characters, but coherence was suppressing imagination.
+
+The philosophy changed to:
+
+> **Codex expands. Human selects.**
+
+AI explores unusual possibilities. Human judgment decides which direction deserves to survive.
+
+This produced much stronger character premises, including the “future selves hunting the present self” concept.
+
+### 03 → 04: Art-direction discipline
+
+Creative concepts alone were not enough.
+
+The third version exposed two new problems:
+
+- browser-game / MMORPG visual drift
+- cinematic 3/4 twisted poses
+
+The Skill therefore added:
+
+- Front-Facing Standee Principle
+- Contemporary Gacha Design Principle
+- Macro-first design
+- Detail Islands
+- Color / Material Architecture
+- Structural Fantasy Design
+- One Primary Iconic Anchor
+
+The result is cleaner, more readable, more character-specific, and closer to contemporary anime gacha standee design.
+
+Current iteration significantly improves:
+
+- frontal readability
+- contemporary gacha language
+- controlled detail density
+- structural fantasy expression
+
+Identity refinement remains an active area of development. We are still researching stronger head identity, costume-specific identity, and deeper integration of fantasy mechanics into the body / outfit.
 
 ## What problem it solves
 
@@ -87,15 +160,15 @@ This repository is itself the Skill root. Clone or download it into the user-lev
 git clone https://github.com/glt258/anime-character-director.git "$HOME\.codex\skills\anime-character-director"
 ```
 
-On Windows, the equivalent explicit path is:
+On Windows, use the user-level Skills directory, for example:
 
 ```powershell
-git clone https://github.com/glt258/anime-character-director.git "C:\Users\<your-user>\.codex\skills\anime-character-director"
+git clone https://github.com/glt258/anime-character-director.git "%USERPROFILE%\.codex\skills\anime-character-director"
 ```
 
 ### Download ZIP
 
-Download the repository ZIP, extract it, and place the extracted `anime-character-director` folder at `C:\Users\<your-user>\.codex\skills\anime-character-director` (or the user-level Skills directory used by your Codex installation).
+Download the repository ZIP, extract it, and place the extracted `anime-character-director` folder in the user-level Skills directory used by your Codex installation.
 
 ## Quick start
 
