@@ -1,6 +1,6 @@
 # Anime Character Director
 
-**A Codex-native Skill for designing original, commercial-style 2D anime / gacha characters.**
+**A Codex-native Skill for human-guided 2D anime gacha character design and art direction.**
 
 From generic AI anime characters to human-guided, identity-driven gacha character design.
 
@@ -117,6 +117,20 @@ This package is the reusable Codex Skill layer. It does not bundle the benchmark
 
 S1 Anime 2D Hard Gate remains the only current visual hard gate. The Commercial Gacha Profile is vocabulary and possibility expansion, not a second gate. After generation, present the image and stop for Human Review; do not automatically redesign, regenerate, optimize, or score commercial appeal.
 
+## Image generation
+
+Anime Character Director is designed to work with Codex built-in `$imagegen`. It does not require an external image API, ComfyUI, or an external Agent server. `$imagegen` is the renderer, not the Character Designer; character design happens before image generation.
+
+## Current Status
+
+Implemented: Anime 2D Hard Gate guidance; Human-guided Character and Art Direction expansion; Human selection and mixing; Front-Facing Character Standee guidance; Contemporary Gacha Design Principle; Macro-first design; Detail Islands; Color Architecture; Material Hierarchy; Structural Fantasy Design; One Primary Iconic Anchor; optional auto planning mode; and Codex built-in `$imagegen` integration.
+
+The Commercial Gacha Visual Profile is creative vocabulary only, not a hard Gate 2.
+
+## Disclaimer
+
+This project is an independent AI-assisted character-design tool. It is not affiliated with, endorsed by, or associated with HoYoverse, miHoYo, Zenless Zone Zero, or any other commercial game studio or title. The example images are AI-generated development examples. The Skill is intended for original character creation.
+
 ## Repository layout
 
 ```text
@@ -137,3 +151,7 @@ anime-character-director/
 └─ scripts/
    └─ README.md
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).

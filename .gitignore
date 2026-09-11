@@ -5,5 +5,9 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 .pytest_cache/
+outputs/
+tmp/
+.cache/
+.env
 *.tmp
 *.log
