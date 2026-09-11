@@ -1,0 +1,9 @@
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.tmp
+*.log

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Anime Character Director"
+  short_description: "Design and validate original anime game characters"
+  default_prompt: "Use $anime-character-director in interactive mode: expand five original character directions, pause for human selection, then expand four contemporary high-end anime gacha art directions with head identity, 3–5 macro shapes, costume architecture, detail islands, one primary iconic anchor, and a frontal_pose_solution for each; pause again before any final design or image generation. For standard character standees, keep the main body front-facing with a stable frontal axis and derive dynamism from arms, hair, cloth, weapons, VFX, and secondary silhouettes. Avoid browser-game/MMORPG ornament stacking while preserving requested adult sensual body framing."
+
+policy:
+  allow_implicit_invocation: true
