@@ -1,6 +1,6 @@
 ---
 name: anime-character-director
-description: Design and validate original commercial 2D anime-game characters, then prepare a style-locked prompt for $imagegen. Use for CREATE requests; do not use for image-only edits, canonization, or realistic art.
+description: Direct original commercial 2D anime-game character creation through quick, directed, explore, variants, same-character, and critique modes, with Human-owned decisions and technical QA before $imagegen.
 ---
 
 # Anime Character Director
@@ -13,11 +13,15 @@ Its job is to transform a user's character idea into a coherent commercial 2D an
 
 The image model is an executor, not the character designer.
 
-## CREATIVE AUTHORITY PRINCIPLE
+## HUMAN AUTHORITY CONTRACT
 
 **Codex expands. Human selects.**
 
-During creative exploration, do not prematurely reject a direction because it is strange, exaggerated, supernatural, theatrical, provocative, impractical, unconventional, difficult to justify, visually aggressive, or conceptually risky. Unless it violates a user hard requirement, safety boundary, or the S1 Anime 2D Hard Gate, show the possibility and name its risk. Human review owns taste.
+AI may create, expand, compare, critique, rank, recommend, revise, regenerate, and propose alternatives. AI may not permanently discard meaningful candidates, hide meaningful history, silently replace a Human-approved design, promote a revision into Canon, turn an aesthetic preference into objective truth, or convert an AI recommendation into a Human decision.
+
+During creative exploration, do not prematurely reject a direction because it is strange, exaggerated, supernatural, theatrical, provocative, impractical, unconventional, difficult to justify, visually aggressive, or conceptually risky. Unless it violates a user hard requirement, safety boundary, or the S1 Anime 2D Hard Gate, show the possibility and name its risk. Human review owns taste. Technical integrity may block delivery; aesthetic disagreement may only be reported or recommended.
+
+Read [human-authority.md](references/human-authority.md) for the full authority contract, technical/aesthetic review boundary, version preservation, lineage, and Human decision vocabulary.
 
 ## FRONT-FACING STANDEE PRINCIPLE
 
@@ -142,18 +146,18 @@ Avoid: three-quarter body pose, side-facing torso, looking back over the shoulde
 If dramatic pose conflicts with clear front-facing character readability, choose the clear front-facing character standee.
 ```
 
-## Scope and hard boundary
+## Mode architecture and scope
 
-- Default CREATE mode is `interactive`: one user idea becomes five Character Directions, then stops at `AWAITING_CHARACTER_SELECTION`.
-- `auto` remains available for benchmark/automation and retains the existing PlanningPipeline path; it is never the default.
-- `VARIANT`, `REFINE`, and `CANONIZE` are reserved and not implemented.
+- The product remains one Skill: `$anime-character-director`. Human-facing modes are `quick`, `directed`, `explore`, `variants`, `same-character`, and `critique`.
+- Route an explicit mode first, then obvious natural-language intent. Default to `explore`; ask one short question only when ambiguity changes the workflow. `auto` remains internal to benchmark/automation and is never a Human-facing default.
+- Every meaningful branch writes lightweight `creative_session.json` and version records. Revisions branch; they do not overwrite Original. Human rejection preserves the artifact.
 - Codex performs the design reasoning; do not call another LLM API, add another design agent, or invent random field combinations.
-- Do not generate an image, call `$imagegen`, compile a final prompt, or create `prompt_bundle.json` during P0.
+- Do not generate an image, call `$imagegen`, compile a final prompt, or create `prompt_bundle.json` unless the selected mode and its Human checkpoints permit generation.
 - The anime constitution is immutable. Always follow `docs/ANIME_STYLE_CONTRACT.md` and `config/anime_style_policy.yaml`. “More realistic” may only increase material, light, or age expression inside anime abstraction.
 - Never target or imitate a named existing character, game, artist, or recognizable style. Replace it with project-owned descriptors such as `modern urban anime action game` or `high-budget commercial 2D anime game`.
 - Do not generate an image in this skill until Runtime validation passes. A `REJECT` result must never reach `$imagegen`.
 
-## Default interactive CREATE workflow
+## Explore mode workflow (default)
 
 1. **User intent** — Extract immutable requirements, preferences, forbidden traits, and under-specified areas. Fill reasonable gaps yourself; ask only when a real conflict changes the user's intent.
 2. **Character Explore** — Codex produces 4–6 short, genuinely different directions; default is 5. Cover at least one obvious direction, one high-upside unusual direction, one relationship-centered direction, one world/fantasy-heavy direction, and one wildcard. Vary identity structure, world position, relationship, specialness, emotional/gameplay fantasy, social role, and mystery structure. Do not create five profession substitutions. Do not write detailed clothing, stockings, heels, coat, skirt, armor, hair accessories, face geometry, or final prompt unless inseparable from the premise.
@@ -168,15 +172,19 @@ If dramatic pose conflicts with clear front-facing character readability, choose
 
 11. **After generation** — Run S1 first, then the mandatory Anatomy Integrity Check, then normal Human Review only after anatomy `PASS`. Keep S1 Anime 2D Hard Gate as the only current visual style hard gate. Anatomy `FAIL` enters Technical Repair or stops with a report; `UNCERTAIN` is explicitly reported for Human Review. Do not automatically score aesthetics, redesign, or optimize.
 
-## Optional auto mode
+## Other modes and optional auto mode
 
-Use `auto` only when the user explicitly asks “你帮我选”, “直接选一个”, “自动继续”, “全自动”, or “直接做完”. It preserves the existing automatic PlanningPipeline path for benchmark and automation. `genericness`, `npc_risk`, `overdesign_risk`, `supernatural_inflation`, `literal_translation_risk`, `safe_selection`, `commercial_viability_score`, and `featured_playable_score` may be recorded as later analysis, but never filter directions in interactive Explore.
+Use [creative-modes.md](references/creative-modes.md) for the mode-specific workflow. `quick` skips Explore and fills only necessary gaps; `directed` may design a complete AI Recommended Design; `variants` creates 3–4 meaningful alternatives for one dimension; `same-character` uses Canon + approved Master and adds Identity Drift Review; `critique` creates revision branches without overwriting the source.
+
+Use `auto` only for explicit benchmark/automation requests such as “你帮我选”, “自动继续”, or “全自动”. It preserves the existing automatic PlanningPipeline path and records `AUTO_RECOMMENDED`, never `HUMAN_APPROVED`. `genericness`, `npc_risk`, `overdesign_risk`, `supernatural_inflation`, `literal_translation_risk`, `safe_selection`, `commercial_viability_score`, and `featured_playable_score` may be recorded as later analysis, but never filter directions in Human-facing Explore.
 
 The future CREATE continuation is intentionally out of scope: only after a later approved Final Character Design stage may the existing `CharacterDesignSpec`, `PromptCompiler`, and `$imagegen` flow run.
 
-If the user explicitly requests multiple designs first, keep them as direction summaries until selection. Do not create multiple `CharacterDesignSpec` objects or images automatically. S2 Commercial Gacha Profile expands vocabulary only; it is not a runtime hard gate. S1 Anime 2D Hard Gate remains the sole current visual hard gate.
+If the user explicitly requests multiple designs first, keep them as direction summaries until selection. Do not create multiple `CharacterDesignSpec` objects or images automatically. AI Review may recommend or rank, but must show Human Options and leave `HUMAN DECISION: pending`. S2 Commercial Gacha Profile expands vocabulary only; it is not a runtime hard gate. S1 Anime 2D Hard Gate remains the sole current visual hard gate.
 
-## Runtime boundary
+## Shared technical pipeline and runtime boundary
+
+All image-producing modes share `Generation → S1 Anime 2D Hard Gate → Anatomy Integrity Check → Human Review`; Same Character additionally runs Identity Drift Review. Technical failure may block delivery or enter bounded repair while preserving the source in lineage. Aesthetic Review never becomes a hard Gate.
 
 The Skill owns intent interpretation, possibility expansion, human selection/mix interpretation, Character Planning, Art Planning, Identity/Canon guidance, Anatomy QA guidance, optional review, and artifact naming. Python Runtime owns planning schema validation, versions, hashes, lineage, state transitions, artifact paths, revision limits, Anime Style Constitution reference checks, and the fail-closed post-generation Anatomy Integrity Check contract. The existing automatic path still allows at most one Art Planning revision and ends at `PLANNING_READY`; interactive exploration may restart only when the human asks for another set. `anime-character-imagegen` remains the later image execution seam; it is not used before both interactive selections.
 
@@ -190,6 +198,8 @@ Text-only pose guidance for the current test character: a full-body adult woman 
 - [workflow.md](references/workflow.md) — CREATE state flow and failure paths; read when executing or troubleshooting.
 - [identity-and-consistency.md](references/identity-and-consistency.md) — Identity Pass, Character Canon, master reference, Same Character Mode, and consistency benchmark.
 - [anatomy-integrity.md](references/anatomy-integrity.md) — mandatory post-generation anatomy inspection, repair policy, and report artifact.
+- [creative-modes.md](references/creative-modes.md) — six Human-facing modes, routing, and shared technical pipeline.
+- [human-authority.md](references/human-authority.md) — Human Authority Contract, technical/aesthetic review, lineage, and decisions.
 - [P4_IDENTITY_AND_CONSISTENCY_REPORT.md](P4_IDENTITY_AND_CONSISTENCY_REPORT.md) — current phase report and future-self hunter dry-run.
 - [P5_ANATOMY_INTEGRITY_REPORT.md](P5_ANATOMY_INTEGRITY_REPORT.md) — anatomy QA boundary, runtime states, and targeted test report.
 - [basic.md](examples/basic.md) and [advanced.md](examples/advanced.md) — dry-run examples only; neither calls `$imagegen`.
