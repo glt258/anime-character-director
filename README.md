@@ -228,8 +228,10 @@ anime-character-director/
 │  ├─ basic.md
 │  └─ advanced.md
 ├─ assets/
-│  ├─ before.png
-│  └─ after.png
+│  ├─ evolution-01-baseline.png
+│  ├─ evolution-02-player-appeal-v1.png
+│  ├─ evolution-03-pagegame-drift.png
+│  └─ evolution-04-current.png
 └─ scripts/
    └─ README.md
 ```
