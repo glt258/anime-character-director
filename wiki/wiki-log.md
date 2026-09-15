@@ -165,3 +165,25 @@
 - updated the hard-invariant and Pose Intent experiment states to `ACCEPTED`; recorded `POSE_SYSTEM_V1_ACCEPTED` / `ACCEPTED / FROZEN`
 - added `docs/POSE_SYSTEM_V1_ACCEPTANCE.md`, `CHANGELOG.md`, the immutable acceptance source, and the Pose Intent A/B experiment page
 - preserved the local benchmark images and reports; no new image generation, repair, cherry-pick, or benchmark was started
+
+## [2026-09-15] implementation | Interaction System + Three Creation Modes v1
+- added `CreativeInteractionSession`, three `GateResolver` implementations, interaction events, persistence, resume, rollback, mode switching, stale-gate protection, idempotency, and legacy migration
+- added interaction schemas, creation-mode policy, workflow/Skill documentation, and deterministic Quick / AI Decide / User Decide demo fixtures
+- added focused interaction regression tests; generation boundary remains `GENERATION_READY`; no image generation or `$imagegen` call
+
+## [2026-09-15] acceptance | Three Mode Interaction UX Acceptance v1
+- ran 43 natural-language and structured-action scenarios against the existing interaction runtime; 10 passed and 33 failed
+- confirmed no image generation and no production-code edits; preserved per-scenario transcripts, session snapshots, event logs, and UX reviews under `outputs/three_mode_interaction_ux_acceptance_v1_20260915/`
+- structured stale-gate, duplicate-event, rollback, restart-resume, three-gate, concise-message, and generation-boundary checks passed; natural-language User Decide control is blocked by action-coercion gaps
+- recorded Quick phrase/constraint extraction issues, unhandled natural cancellation, provenance remapping, and missing `REGENERATE_OPTIONS`; result is `THREE_MODE_INTERACTION_UX_ACCEPTANCE_FAILED` pending Human Review
+
+## [2026-09-15] implementation | Interaction Natural Language Layer and Constraint Preservation Fix v1
+- added the deterministic natural-language parser and intent model for candidate selection, MIX, visual updates, delegation, recommendation acceptance, questions, ambiguity, cancellation, regeneration, continuation, and mode switching
+- added explicit positive/negative constraint extraction, pending later-field updates, explicit-user locking/no-reask behavior, and prompt propagation
+- preserved `human_accept_recommended` separately from `delegated_ai`; added focused parser/runtime regression coverage and schema fields
+- post-fix exact 43-scenario UX rerun was the acceptance gate; no image generation was performed
+
+## [2026-09-15] acceptance | Interaction Natural Language Layer and Constraint Preservation Fix v1
+- reran the exact 43-scenario UX suite after the fix: 43 PASS, 0 FAIL, including the defined core scenarios
+- focused parser/runtime regression passed 47 tests; no image generation or `$imagegen` call was made
+- disposition was `THREE_MODE_INTERACTION_UX_RETEST_PASS_PENDING_HUMAN_REVIEW`; the later Human Review acceptance is recorded below

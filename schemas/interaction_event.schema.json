@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "interaction_event.schema.json",
+  "title": "InteractionEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "session_id", "gate_id", "action", "payload", "timestamp"],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "gate_id": {"type": "string", "minLength": 1},
+    "action": {"enum": ["SELECT", "MIX", "CUSTOM", "DELEGATE", "PARTIAL_DELEGATE", "USE_RECOMMENDED", "USE_ALL_RECOMMENDED", "BACK", "CANCEL", "REGENERATE_OPTIONS", "CONSTRAINT_UPDATE", "CONTINUE", "QUESTION_ONLY", "INVALID", "AMBIGUOUS"]},
+    "payload": {"type": "object"},
+    "timestamp": {"type": "string", "format": "date-time"}
+  }
+}

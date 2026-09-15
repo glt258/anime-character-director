@@ -1,0 +1,13 @@
+{
+  "demo_id": "ai-decide-v1",
+  "mode": "AI_DECIDE",
+  "input": "你帮我完整设计一个成年女性角色，都交给你",
+  "events": [],
+  "expected": {
+    "status": "GENERATION_READY",
+    "character_explore_count": 4,
+    "art_explore_count": 4,
+    "decision_source": "delegated_ai",
+    "imagegen_called": false
+  }
+}

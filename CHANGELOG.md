@@ -1,5 +1,15 @@
 # Changelog
 
+## Three-Mode Interaction System v1 — 2026-09-15
+
+Status: `ACCEPTED / FROZEN`
+
+- Added shared-session `QUICK`, `AI_DECIDE`, and `USER_DECIDE` orchestration with Character, Art, and Visual Preference gates.
+- Added natural-language gate actions, recommendation/delegation separation, explicit constraint locking, pending constraints, resume/rollback/restart, mode switching, regeneration, and provenance.
+- Preserved the first UX evidence (`10 PASS / 33 FAIL`) and recorded the post-fix rerun at `43/43 PASS`.
+- Human Review accepted `THREE_MODE_INTERACTION_SYSTEM_V1_ACCEPTED` and `INTERACTION_NL_V1_ACCEPTED` as the stable production baseline for the current interaction scope.
+- No image generation, benchmark start, or push was performed.
+
 ## Pose System v1 — 2026-09-15
 
 Status: `ACCEPTED / FROZEN`

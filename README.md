@@ -218,17 +218,17 @@ I want:
 - dangerous but elegant
 - strong player appeal
 
-Use interactive mode.
-Do not choose the final direction for me.
+Use `USER_DECIDE` mode.
+Do not choose the Character or Art direction for me.
 ```
 
-The Skill stops after Character Explore until Human selection. After selection it stops again after Art Explore. Only the approved/mixed direction proceeds to Final Visual Direction and, when the host supports it, the existing local Runtime → PromptCompiler → built-in `$imagegen` path.
+The Skill stops at the Character Direction and Art Direction gates, then presents one consolidated Visual Preference Sheet. Each user selection resumes the same persisted session automatically. Only a fully resolved direction proceeds through the local Runtime → PromptCompiler boundary.
 
 ## Runtime and boundaries
 
 This package is the reusable Codex Skill layer. It bundles the human-readable Anime Style Constitution, machine-readable style policy, Visual Preference runtime gate, preference schema, report format, and focused tests. It does not bundle an external Agent, server, LLM API wrapper, image API, or ComfyUI pipeline. A host project may add a larger Runtime preflight around the bundled ownership gate.
 
-S1 Anime 2D Hard Gate remains the only current visual hard gate. The Commercial Gacha Profile is vocabulary and possibility expansion, not a second gate. After generation, present the image and stop for Human Review; do not automatically redesign, regenerate, optimize, or score commercial appeal.
+The current runtime preserves the S1 Anime 2D, Regional Style, Lower-Body, Leg Separation, Pose Intent, and Playable Character Design contracts. Interaction System v1 ends at `GENERATION_READY`; it does not call `$imagegen` or generate images. After a later generation, present the image and stop for Human Review; do not automatically redesign, regenerate, optimize, or score commercial appeal.
 
 ## Change Reporting Contract
 
@@ -242,7 +242,9 @@ Anime Character Director is designed to work with Codex built-in `$imagegen`. It
 
 Pose System v1 is `ACCEPTED / FROZEN` for the current fast-generation production baseline. See [Pose System v1 Acceptance](docs/POSE_SYSTEM_V1_ACCEPTANCE.md). This is an accepted baseline, not a claim that every future pose problem is completely solved; detailed pose refinement remains a separate future mode.
 
-Implemented: Standee-first product scope; Anime 2D Hard Gate guidance; Human-guided Character and Art Direction expansion; Human selection and mixing; Design Ownership Policy; Visual Preference Gate; Visual Preference Sheet and report; Visual Diversity Control; Human Audit Policy; Front-Facing Character Standee guidance; Contemporary Gacha Design Principle; Identity Pass; Character Canon; Same-Character Standee; controlled Variants including four-direction `standee_pose_variant` planning; Anatomy Integrity; Human Authority; Optional Presentation Extensions; Macro-first design; Detail Islands; Color Architecture; Material Hierarchy; Structural Fantasy Design; One Primary Iconic Anchor; plain-Chinese Change Reporting Contract; optional auto planning mode; and Codex built-in `$imagegen` integration.
+Interaction System + Three Creation Modes v1 is `THREE_MODE_INTERACTION_SYSTEM_V1_ACCEPTED` / `ACCEPTED / FROZEN`. `QUICK`, `AI_DECIDE`, and `USER_DECIDE` share one persisted pipeline; the natural-language layer is `INTERACTION_NL_V1_ACCEPTED`; all flows stop at `GENERATION_READY` without image generation. See [Three-Mode Interaction System v1 Acceptance](docs/THREE_MODE_INTERACTION_V1_ACCEPTANCE.md).
+
+Implemented: Standee-first product scope; Anime 2D Hard Gate guidance; three-mode Interaction System; Human-guided Character and Art Direction expansion; Human selection and mixing; Design Ownership Policy; Visual Preference Gate; Visual Preference Sheet and report; Visual Diversity Control; Human Audit Policy; Front-Facing Character Standee guidance; Contemporary Gacha Design Principle; Identity Pass; Character Canon; Same-Character Standee; controlled Variants including four-direction `standee_pose_variant` planning; Anatomy Integrity; Human Authority; Optional Presentation Extensions; Macro-first design; Detail Islands; Color Architecture; Material Hierarchy; Structural Fantasy Design; One Primary Iconic Anchor; plain-Chinese Change Reporting Contract; and Codex built-in `$imagegen` integration.
 
 The historical Commercial Gacha Visual Profile remains vocabulary/reference material. The runtime Gacha Rendering Style Gate now has Global and Regional stages; both must pass before `STYLE_VALID`.
 
@@ -264,9 +266,13 @@ anime-character-director/
 ├─ schemas/
 │  └─ visual_preference_sheet.schema.json
 ├─ runtime/
+│  ├─ interaction_runtime.py
+│  ├─ natural_language_interaction.py
 │  └─ visual_preference_runtime.py
 ├─ docs/
-│  └─ ANIME_STYLE_CONTRACT.md
+│  ├─ ANIME_STYLE_CONTRACT.md
+│  ├─ INTERACTION_SYSTEM.md
+│  └─ THREE_MODE_INTERACTION_V1_ACCEPTANCE.md
 ├─ references/
 │  ├─ character-design-guide.md
 │  └─ workflow.md

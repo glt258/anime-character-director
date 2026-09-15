@@ -1,0 +1,18 @@
+{
+  "demo_id": "user-decide-v1",
+  "mode": "USER_DECIDE",
+  "input": "给我设计一个女角色，我自己选",
+  "events": [
+    {"event_id": "character-choice", "action": "SELECT", "payload": {"candidate_id": "B"}},
+    {"event_id": "art-choice", "action": "MIX", "payload": {"selections": ["A", "C"]}},
+    {"event_id": "visual-choice", "action": "USE_ALL_RECOMMENDED", "payload": {"overrides": {"hair_color": {"option_id": "B"}, "footwear_family": {"option_id": "C"}}}}
+  ],
+  "expected": {
+    "turn_1": "AWAITING_CHARACTER_DIRECTION",
+    "turn_2": "AWAITING_ART_DIRECTION",
+    "turn_3": "AWAITING_VISUAL_PREFERENCES",
+    "final": "GENERATION_READY",
+    "provenance": ["human_select", "human_mix", "human_accept_recommended"],
+    "imagegen_called": false
+  }
+}

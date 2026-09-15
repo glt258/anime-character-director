@@ -1,0 +1,12 @@
+{
+  "demo_id": "quick-v1",
+  "mode": "QUICK",
+  "input": "快速给我来一个银发狐狸系成年男性",
+  "events": [],
+  "expected": {
+    "status": "GENERATION_READY",
+    "waits_for_user": false,
+    "provenance": ["explicit_user", "quick_ai_fill"],
+    "imagegen_called": false
+  }
+}
