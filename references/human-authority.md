@@ -6,11 +6,15 @@ AI may create, expand, compare, critique, rank, recommend, revise, regenerate, a
 
 AI judgment is useful; AI authority is limited. AI may recommend. Human selection is authoritative.
 
+For visual identity, the Design Ownership Policy is explicit: AI proposes `USER_OWNED_IDENTITY_VARIABLES`, but it may not lock them from personality, lore, profession, or genre defaults. The Human must select, Mix, Customise, or explicitly delegate each one. Read [design-ownership.md](design-ownership.md) and the [Visual Preference Report format](../docs/VISUAL_PREFERENCE_REPORT.md).
+
 ## Technical review versus aesthetic review
 
 Technical Review covers observable integrity: S1 Anime 2D Hard Gate failure, malformed or corrupt files, invalid schemas or required artifacts, Canon integrity corruption, extra/missing/fused visible fingers, duplicated hands, extra limbs, broken wrists, malformed body connections, severe foot defects, and weapon-through-palm. Technical QA may fail, repair, regenerate, or stop delivery. The original remains in history/lineage even when blocked.
 
 Aesthetic Review covers pagegame association, genericness, sexiness preference, motif preference, detail density, hairstyle preference, color preference, player appeal, commercial gacha feeling, pullability, and unusualness. AI may report, compare, warn, rank, and recommend. It may not automatically delete, reject, or replace a version for those reasons.
+
+Pose, leg arrangement, footwear, hosiery, sensuality, and portfolio-convergence guidance belongs to Aesthetic Review, except the global `LegSeparationContract` and actual-image `LegSeparationGate`. High heels, black stockings, and familiar combinations remain valid options; crossed-leg geometry does not. Repetition can be recorded as `AESTHETIC_NOTE` and may motivate alternatives, but the hard leg invariant remains a technical block. Explicit Human taste and Human-approved Canon override anti-template suggestions only where no system hard invariant is violated.
 
 ```text
 AI ANALYSIS → AI RECOMMENDATION → HUMAN OPTIONS → HUMAN DECISION
@@ -49,3 +53,15 @@ Familiar is not automatically bad. Unusual is not automatically good. Common mot
 ## P6 carry-forward lesson
 
 Different presentation contexts can introduce clocks, fractured structures, stronger echoes, or other new visual language. Record those as proposed, optional, or context-only motifs. Do not automatically approve them, and do not automatically ban them.
+
+## Standee-first and change reporting
+
+The Skill's default product is character standees and controlled identity-preserving variants. Combat, ultimate, promotional, and story outputs remain optional presentation extensions unless the user explicitly requests them; this scope does not remove or reject historical branches.
+
+Every development response must briefly state: **这次在干什么**, **为什么要改**, **这次具体改了什么**, **这次没动什么**, **检查结果**, **现在项目到哪了**, and **下一步**. Use plain Chinese, explain the effect before file names, and translate a technical English term on first use when it helps. This reporting contract improves Human visibility; it is not a creative or runtime gate.
+
+## Same-character standee pose variants
+
+`standee_pose_variant` belongs to the existing `variants` mode. The AI first presents exactly four text-only, structurally different standard standee poses from the approved Character Canon and Master Reference, then stops at `AWAITING_HUMAN_STANDEE_POSE_SELECTION`. Human may select, Mix, keep multiple, request more, or reject all. No image is generated before that choice, and one selected result is the default generation count.
+
+The AI may recommend a pose, but may not choose for Human, update Canon automatically, delete the Original, or turn a familiar pose into a failure. Face, hair, body, costume, stockings, footwear, palette, and primary anchor remain locked by default; stance, weight, arms, legs, small head attitude, cloth/hair motion, and restrained temporary ability expression may vary. Multiple approved poses may be labeled Primary or Alternate only by Human decision.

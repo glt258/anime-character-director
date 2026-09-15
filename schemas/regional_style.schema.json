@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "regional_style.schema.json",
+  "title": "Regional Visual Language Contracts",
+  "type": "object",
+  "properties": {
+    "regional_visual_language": {"$ref": "#/$defs/regionalVisualLanguage"},
+    "regional_visual_language_source": {"$ref": "#/$defs/regionalSource"},
+    "regional_style_override_reason": {"type": "string", "minLength": 1},
+    "lower_body_visual_variables": {"$ref": "#/$defs/lowerBodyDesign"},
+    "prompt_bundle": {"$ref": "#/$defs/promptBundle"},
+    "regional_style_review": {"$ref": "#/$defs/regionalStyleReview"},
+    "style_gate_result": {"$ref": "#/$defs/styleGateResult"},
+    "outfit_features": {"$ref": "#/$defs/outfitFeatures"},
+    "background_features": {"$ref": "#/$defs/backgroundFeatures"},
+    "lower_body_review": {"$ref": "#/$defs/lowerBodyReview"},
+    "lower_body_grounding_review": {"$ref": "#/$defs/lowerBodyGroundingReview"},
+    "leg_separation_contract": {"$ref": "#/$defs/legSeparationContract"},
+    "leg_separation_gate": {"$ref": "#/$defs/legSeparationGate"},
+    "pose_family": {"type": "string", "minLength": 1},
+    "stance_family": {"type": "string", "minLength": 1},
+    "pose_intent": {"$ref": "#/$defs/poseIntentType"},
+    "pose_intent_contract": {"$ref": "#/$defs/poseIntentContract"},
+    "pose_intent_gate": {"$ref": "#/$defs/poseIntentGate"},
+    "actual_pose_features": {"$ref": "#/$defs/actualPoseFeatures"},
+    "pose_intent_result": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
+    "pose_intent_failure_type": {"type": "array", "items": {"$ref": "#/$defs/poseIntentFailureType"}},
+    "pose_diversity_ledger": {"$ref": "#/$defs/poseDiversityLedger"},
+    "leg_crossing_risk": {"enum": ["LOW", "MEDIUM", "HIGH", "FORBIDDEN"]},
+    "centerline_crossing": {"type": ["boolean", "null"]},
+    "candidate_promotion_status": {
+      "enum": [
+        "PROMOTED_TO_CANDIDATE",
+        "REJECTED_BY_HARD_ANATOMY_GATE",
+        "FIRST_PASS_LEG_CROSSING_FAIL",
+        "FIRST_PASS_LEG_GEOMETRY_UNCERTAIN",
+        "LEG_GEOMETRY_UNRESOLVED",
+        "POSE_INTENT_FAIL"
+      ]
+    },
+    "pose_repair_count": {"type": "integer", "minimum": 0},
+    "strong_female_regional_style_review": {"$ref": "#/$defs/strongFemaleRegionalStyleReview"},
+    "male_regional_body_review": {"$ref": "#/$defs/maleRegionalBodyReview"},
+    "background_presentation_review": {"type": "object"}
+  },
+  "$defs": {
+    "regionalVisualLanguage": {
+      "enum": [
+        "EAST_ASIAN_CONTEMPORARY_GACHA",
+        "WESTERN_ANIME_INSPIRED",
+        "REGION_NEUTRAL_ANIME",
+        "CUSTOM"
+      ]
+    },
+    "regionalSource": {
+      "enum": [
+        "default_style_policy",
+        "explicit_user_selection",
+        "explicit_user_override",
+        "benchmark_delegation",
+        "migrated_default"
+      ]
+    },
+    "promptBundle": {
+      "type": "object",
+      "required": [
+        "rendering_foundation",
+        "regional_visual_language",
+        "regional_visual_language_source",
+        "character_visual_style",
+        "positive_constraints",
+        "negative_constraints",
+        "prompt"
+      ],
+      "properties": {
+        "rendering_foundation": {"type": "string", "minLength": 1},
+        "regional_visual_language": {"$ref": "#/$defs/regionalVisualLanguage"},
+        "regional_visual_language_source": {"$ref": "#/$defs/regionalSource"},
+        "character_visual_style": {"type": "string", "minLength": 1},
+        "positive_constraints": {"type": "array", "items": {"type": "string"}},
+        "negative_constraints": {"type": "array", "items": {"type": "string"}},
+        "lower_body_variables": {"type": "object"},
+        "lower_body_constraints": {"type": "array", "items": {"type": "string"}},
+        "pose_intent": {"$ref": "#/$defs/poseIntentType"},
+        "pose_intent_contract": {"$ref": "#/$defs/poseIntentContract"},
+        "prompt": {"type": "string", "minLength": 1}
+      }
+    },
+    "lowerBodyDesign": {
+      "type": "object",
+      "required": ["exposure_strategy", "legwear_family", "leg_accessory_family", "footwear_family", "foot_visibility", "visual_reason"],
+      "properties": {
+        "exposure_strategy": {"type": "string"},
+        "legwear_family": {"type": "string"},
+        "leg_accessory_family": {"type": "string"},
+        "footwear_family": {"type": "string"},
+        "foot_visibility": {"type": "string"},
+        "visual_reason": {"type": "string"},
+        "relationship_to_character_style": {"type": "string"},
+        "relationship_to_pose": {"type": "string"},
+        "repetition_risk": {"type": "string"},
+        "age_group": {"type": "string"}
+      }
+    },
+    "lowerBodyReview": {
+      "type": "object",
+      "required": ["age_group", "legwear_family", "leg_accessory_family", "footwear_family", "genericness_risk", "result", "fanservice_is_independent"],
+      "properties": {
+        "age_group": {"type": "string"},
+        "exposure_strategy": {},
+        "legwear_family": {},
+        "leg_accessory_family": {},
+        "footwear_family": {},
+        "foot_visibility": {},
+        "visual_reason": {"type": "string"},
+        "relationship_to_character_style": {},
+        "relationship_to_pose": {},
+        "repetition_risk": {},
+        "genericness_risk": {"enum": ["LOW", "HIGH"]},
+        "result": {"enum": ["PASS", "PASS_WITH_NOTE"]},
+        "fanservice_is_independent": {"const": true},
+        "issues": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "lowerBodyGroundingReview": {
+      "type": "object",
+      "required": ["actual_image", "result", "issues", "detected_drift_types"],
+      "properties": {
+        "actual_image": {"type": "string"},
+        "result": {"enum": ["PASS", "FAIL"]},
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "detected_drift_types": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "legSeparationContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "thighs_separate",
+        "knees_separate",
+        "calves_separate",
+        "ankles_separate",
+        "feet_separate",
+        "no_centerline_crossing",
+        "no_leg_occlusion_crossing",
+        "readable_negative_space"
+      ],
+      "properties": {
+        "thighs_separate": {"const": true},
+        "knees_separate": {"const": true},
+        "calves_separate": {"const": true},
+        "ankles_separate": {"const": true},
+        "feet_separate": {"const": true},
+        "no_centerline_crossing": {"const": true},
+        "no_leg_occlusion_crossing": {"const": true},
+        "readable_negative_space": {"const": true}
+      }
+    },
+    "legSeparationGate": {
+      "type": "object",
+      "required": ["actual_image", "result", "contract", "failure_types", "issues"],
+      "properties": {
+        "actual_image": {"type": "string", "minLength": 1},
+        "result": {"enum": ["PASS", "FAIL", "UNCERTAIN"]},
+        "contract": {"$ref": "#/$defs/legSeparationContract"},
+        "thigh_relation": {"type": "string"},
+        "knee_relation": {"type": "string"},
+        "calf_relation": {"type": "string"},
+        "ankle_relation": {"type": "string"},
+        "foot_relation": {"type": "string"},
+        "centerline_crossing": {"type": ["boolean", "null"]},
+        "leg_negative_space": {"type": ["boolean", "null"]},
+        "stance_family": {"type": "string"},
+        "failure_types": {"type": "array", "items": {"type": "string"}},
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "evidence_source": {"type": "string"}
+      }
+    },
+    "poseIntentType": {
+      "enum": [
+        "ELEGANT",
+        "SENSUAL",
+        "RELAXED_ASYMMETRIC",
+        "LOW_ENERGY",
+        "NARROW_STANCE",
+        "ONE_FOOT_FORWARD",
+        "OPEN_STANCE",
+        "WIDE_ACTIVE",
+        "STABLE_OPEN",
+        "CUSTOM",
+        "UNKNOWN_LEGACY_POSE_INTENT"
+      ]
+    },
+    "poseIntentContract": {
+      "type": "object",
+      "required": [
+        "requested_intent",
+        "resolved_pose_family",
+        "required_body_signals",
+        "forbidden_shortcuts",
+        "minimum_visible_signals",
+        "leg_safety_required",
+        "depth_requirement",
+        "stance_width_requirement",
+        "asymmetry_requirement",
+        "energy_level",
+        "torso_requirement",
+        "arm_requirement",
+        "head_requirement"
+      ],
+      "properties": {
+        "requested_intent": {"$ref": "#/$defs/poseIntentType"},
+        "resolved_pose_family": {"type": "string"},
+        "required_body_signals": {"type": "array", "items": {"type": "string"}},
+        "forbidden_shortcuts": {"type": "array", "items": {"type": "string"}},
+        "minimum_visible_signals": {"type": "integer", "minimum": 0},
+        "leg_safety_required": {"const": true},
+        "depth_requirement": {"type": "string"},
+        "stance_width_requirement": {"type": "string"},
+        "asymmetry_requirement": {"type": "string"},
+        "energy_level": {"type": "string"},
+        "torso_requirement": {"type": "string"},
+        "arm_requirement": {"type": "string"},
+        "head_requirement": {"type": "string"}
+      }
+    },
+    "poseIntentGate": {
+      "type": "object",
+      "required": [
+        "actual_image",
+        "requested_intent",
+        "resolved_pose_family",
+        "result",
+        "overall_pose_intent_match",
+        "contract",
+        "stance_width",
+        "foot_depth",
+        "weight_distribution",
+        "knee_state",
+        "torso",
+        "shoulder_relation",
+        "arm_activity",
+        "head_angle",
+        "energy_read",
+        "failure_types",
+        "issues"
+      ],
+      "properties": {
+        "actual_image": {"type": "string", "minLength": 1},
+        "requested_intent": {"$ref": "#/$defs/poseIntentType"},
+        "resolved_pose_family": {"type": "string"},
+        "result": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
+        "overall_pose_intent_match": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
+        "contract": {"$ref": "#/$defs/poseIntentContract"},
+        "stance_width": {"enum": ["NARROW", "NORMAL", "WIDE", "UNCERTAIN"]},
+        "foot_depth": {"enum": ["SAME_PLANE", "FORWARD_LEFT", "FORWARD_RIGHT", "UNCERTAIN"]},
+        "weight_distribution": {"enum": ["CENTERED", "LEFT", "RIGHT", "UNCERTAIN"]},
+        "knee_state": {"enum": ["STRAIGHT", "SOFT", "BENT", "UNCERTAIN"]},
+        "torso": {"enum": ["UPRIGHT", "RELAXED", "TILTED", "FORWARD", "BACK", "UNCERTAIN"]},
+        "shoulder_relation": {"enum": ["LEVEL", "ASYMMETRIC", "RELAXED", "UNCERTAIN"]},
+        "arm_activity": {"enum": ["ACTIVE", "RELAXED", "ASYMMETRIC", "CLOSED", "UNCERTAIN"]},
+        "head_angle": {"enum": ["NEUTRAL", "TILTED", "TURNED", "UNCERTAIN"]},
+        "energy_read": {"enum": ["HIGH", "MEDIUM", "LOW", "UNCERTAIN"]},
+        "matched_signals": {"type": "array", "items": {"type": "string"}},
+        "missing_signals": {"type": "array", "items": {"type": "string"}},
+        "failure_types": {"type": "array", "items": {"$ref": "#/$defs/poseIntentFailureType"}},
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "evidence_source": {"type": "string"}
+      }
+    },
+    "poseIntentFailureType": {
+      "enum": [
+        "POSE_INTENT_FAIL",
+        "POSE_SEMANTIC_EROSION",
+        "POSE_SAFETY_OVERCONSTRAINT",
+        "NARROW_STANCE_EXPANDED",
+        "ONE_FOOT_FORWARD_DEPTH_MISSING",
+        "LOW_ENERGY_READ_MISSING",
+        "SENSUAL_POSE_REDUCED_TO_OUTFIT",
+        "ELEGANT_POSE_REDUCED_TO_NEUTRAL",
+        "RELAXED_ASYMMETRY_MISSING"
+      ]
+    },
+    "actualPoseFeatures": {
+      "type": "object",
+      "properties": {
+        "stance_width": {"type": "string"},
+        "foot_depth": {"type": "string"},
+        "weight_distribution": {"type": "string"},
+        "knee_state": {"type": "string"},
+        "torso": {"type": "string"},
+        "shoulder_relation": {"type": "string"},
+        "arm_activity": {"type": "string"},
+        "head_angle": {"type": "string"},
+        "energy_read": {"type": "string"}
+      }
+    },
+    "poseDiversityLedger": {
+      "type": "object",
+      "required": ["fields", "records"],
+      "properties": {
+        "fields": {"type": "array", "items": {"type": "string"}},
+        "records": {"type": "array", "items": {"$ref": "#/$defs/actualPoseFeatures"}},
+        "homogenization": {"type": "object"}
+      }
+    },
+    "regionalStyleReview": {
+      "type": "object",
+      "required": [
+        "actual_image",
+        "target_regional_visual_language",
+        "regional_visual_language_match",
+        "east_asian_gacha_read",
+        "western_anime_drift",
+        "western_concept_art_drift",
+        "facial_abstraction_match",
+        "body_rendering_match",
+        "costume_language_match",
+        "presentation_match",
+        "confidence",
+        "result",
+        "expected_regional_visual_language",
+        "pseudo_oriental_default_detected",
+        "detected_drift_types"
+      ],
+      "properties": {
+        "actual_image": {"type": "string"},
+        "target_regional_visual_language": {"$ref": "#/$defs/regionalVisualLanguage"},
+        "expected_regional_visual_language": {"$ref": "#/$defs/regionalVisualLanguage"},
+        "perceived_regional_visual_language": {"type": "string"},
+        "regional_visual_language_match": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
+        "east_asian_gacha_read": {"type": "integer", "minimum": 1, "maximum": 10},
+        "western_anime_drift": {"enum": ["NONE", "LOW", "MEDIUM", "HIGH"]},
+        "western_concept_art_drift": {"enum": ["NONE", "LOW", "MEDIUM", "HIGH"]},
+        "facial_abstraction_match": {"type": "integer", "minimum": 1, "maximum": 10},
+        "body_rendering_match": {"type": "integer", "minimum": 1, "maximum": 10},
+        "costume_language_match": {"type": "integer", "minimum": 1, "maximum": 10},
+        "outfit_language_match": {"type": "integer", "minimum": 1, "maximum": 10},
+        "material_language_match": {"type": "integer", "minimum": 1, "maximum": 10},
+        "presentation_match": {"type": "integer", "minimum": 1, "maximum": 10},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "result": {"enum": ["STYLE_VALID", "FAIL"]},
+        "evidence_source": {"type": "string"},
+        "maturity_read": {"type": "integer", "minimum": 1, "maximum": 10},
+        "pseudo_oriental_default_detected": {"type": "boolean"},
+        "detected_drift_types": {"type": "array", "items": {"type": "string"}},
+        "rationale": {"type": "string"}
+      }
+    },
+    "styleGateResult": {
+      "type": "object",
+      "required": [
+        "global_rendering_result",
+        "regional_visual_language_result",
+        "character_visual_style_result",
+        "detected_drift_types",
+        "overall_result"
+      ],
+      "properties": {
+        "global_rendering_result": {"type": "string"},
+        "regional_visual_language_result": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
+        "character_visual_style_result": {"type": "string"},
+        "detected_drift_types": {"type": "array", "items": {"type": "string"}},
+        "overall_result": {"enum": ["STYLE_VALID", "FAIL"]}
+      }
+    },
+    "strongFemaleRegionalStyleReview": {
+      "type": "object",
+      "required": ["result", "commercial_gacha_anime_read", "western_superhero_anatomy_drift"],
+      "properties": {
+        "result": {"enum": ["PASS", "FAIL"]},
+        "commercial_gacha_anime_read": {"type": "boolean"},
+        "western_superhero_anatomy_drift": {"enum": ["NONE", "LOW", "MEDIUM", "HIGH"]},
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "detected_drift_types": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "maleRegionalBodyReview": {
+      "type": "object",
+      "required": ["result", "body_type", "western_heroic_triangle_drift"],
+      "properties": {
+        "result": {"enum": ["PASS", "FAIL"]},
+        "body_type": {"type": "string"},
+        "western_heroic_triangle_drift": {"enum": ["NONE", "LOW", "MEDIUM", "HIGH"]},
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "detected_drift_types": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "outfitFeatures": {
+      "type": "object",
+      "properties": {
+        "outfit_family": {},
+        "neckline_family": {},
+        "upper_body_structure": {},
+        "lower_body_structure": {},
+        "outer_layer_family": {},
+        "waist_structure": {},
+        "hanging_cloth_presence": {},
+        "cape_presence": {},
+        "sash_presence": {},
+        "major_trim_language": {},
+        "footwear_family": {},
+        "exposure_strategy": {},
+        "legwear_family": {}
+      }
+    },
+    "backgroundFeatures": {
+      "type": "object",
+      "properties": {
+        "background_family": {},
+        "background_motif": {},
+        "giant_circle_presence": {"type": "boolean"},
+        "decorative_ring_presence": {"type": "boolean"},
+        "fantasy_platform_presence": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -41,3 +41,143 @@ hard_requirements:
 rules:
   realism_cannot_satisfy_character_variation: true
   style_gate_required: true
+
+regional_visual_language:
+  default: "EAST_ASIAN_CONTEMPORARY_GACHA"
+  allow_user_override: true
+  priority_after_global_rendering_style: true
+  is_character_ethnicity: false
+  contract:
+    positive:
+      - "anime-first facial abstraction: simplified facial planes, restrained nose and lips, clean anime jaw/chin construction"
+      - "modern East-Asian commercial gacha illustration grammar with a readable playable-character focal point"
+      - "anime-proportioned, anatomically coherent bodies with controlled muscle definition rather than western superhero massing"
+      - "character-design-first outfit construction with diverse outfit families rather than generic fantasy robes"
+      - "polished anime game lighting, intentional material separation, and premium stylized 2D finish"
+      - "commercial gacha presentation: finished promotional-quality character illustration, not a model sheet or concept board"
+    negative:
+      - "western comic anatomy"
+      - "western superhero proportions"
+      - "western fantasy character concept art"
+      - "semi-realistic western anime illustration"
+      - "realistic facial planes"
+      - "heavy brow ridge"
+      - "strongly projected realistic nose"
+      - "realistic full-lip portrait styling"
+      - "painterly fantasy concept rendering"
+  critic_thresholds:
+    fail_read_below: 4
+    acceptable_read_at_least: 6
+    strong_read_at_least: 8
+    minimum_confidence: 0.5
+    outfit_collapse_min_count: 4
+  drift_types:
+    - "WESTERN_ANIME_STYLE_DRIFT"
+    - "WESTERN_FANTASY_CONCEPT_DRIFT"
+    - "WESTERN_SUPERHERO_ANATOMY_DRIFT"
+    - "PSEUDO_ORIENTAL_FANTASY_DEFAULT"
+    - "GENERIC_FANTASY_RPG_DRIFT"
+    - "CHARACTER_SHEET_PRESENTATION_DRIFT"
+    - "OUTFIT_FAMILY_COLLAPSE"
+    - "BACKGROUND_PRESENTATION_COLLAPSE"
+    - "REGIONAL_STYLE_INFANTILIZATION"
+    - "ARCHETYPE_SHORTCUT"
+    - "ARCHETYPE_SHORTCUT_REPLACEMENT"
+    - "CONSERVATIVE_COVERAGE_COLLAPSE"
+    - "LEGWEAR_FAMILY_COLLAPSE"
+    - "FOOTWEAR_FAMILY_COLLAPSE"
+    - "FOOTWEAR_GROUNDING_FAIL"
+    - "LEGWEAR_GROUNDING_FAIL"
+    - "LOWER_BODY_ANCHOR_MISS"
+
+lower_body_visual_language:
+  anti_fanservice_is_not_anti_exposure: true
+  adult_free_exploration: true
+  minor_sexualized_accessories: false
+  fanservice_is_independent_from_coverage: true
+  diversity_penalty_is_hard_gate: false
+  conservative_coverage_min_count: 4
+  skin_exposure_strategies:
+    - "fully covered"
+    - "mostly covered"
+    - "partial thigh exposure"
+    - "knee / calf exposure"
+    - "full-leg exposure"
+    - "asymmetrical exposure"
+    - "side-leg exposure"
+    - "ankle / foot emphasis"
+  legwear_families:
+    - "none"
+    - "sheer tights"
+    - "opaque tights"
+    - "patterned tights"
+    - "thigh-high stockings"
+    - "knee-high stockings"
+    - "over-knee socks"
+    - "fitted leggings"
+    - "fantasy leg wraps"
+    - "asymmetric legwear"
+    - "one-leg stocking / one-leg exposed"
+    - "integrated bodysuit leg section"
+    - "loose lower-leg fabric"
+  leg_accessory_families:
+    - "none"
+    - "thigh ring"
+    - "leg strap"
+    - "garter-like decorative band"
+    - "knee ornament"
+    - "calf strap"
+    - "ankle ornament"
+    - "chain detail"
+    - "fabric tie"
+    - "asymmetrical leg accessory"
+    - "integrated armor / hard accent"
+  footwear_families:
+    - "barefoot"
+    - "barefoot with ankle / instep ornament"
+    - "toe-loop footwear"
+    - "open sandals"
+    - "fantasy sandals"
+    - "high sandals"
+    - "low sandals"
+    - "flats"
+    - "loafers"
+    - "pumps"
+    - "low heels"
+    - "high heels"
+    - "platform shoes"
+    - "sneakers"
+    - "soft boots"
+    - "ankle boots"
+    - "tall boots"
+    - "open-toe boots"
+    - "split-toe / tabi-inspired fantasy footwear"
+    - "foot-wrap construction"
+    - "partial footwear"
+    - "asymmetrical footwear"
+
+pose_constraints:
+  no_crossed_legs:
+    enabled: true
+    severity: "blocking"
+    allow_user_override: false
+    require_positive_geometry: true
+    require_actual_image_gate: true
+    max_pose_only_repair: 1
+  pose_families:
+    OPEN_PARALLEL_STANCE:
+      leg_crossing_risk: "LOW"
+    OFFSET_NON_OVERLAPPING_STANCE:
+      leg_crossing_risk: "LOW"
+    ASYMMETRIC_WEIGHT_STANCE:
+      leg_crossing_risk: "LOW"
+    WIDE_ACTIVE_STANCE:
+      leg_crossing_risk: "LOW"
+    NARROW_SEPARATED_STANCE:
+      leg_crossing_risk: "LOW"
+    LOW_ENERGY_SEPARATED_STANCE:
+      leg_crossing_risk: "LOW"
+    FORWARD_STEP_NON_CROSSING:
+      leg_crossing_risk: "LOW"
+    FORBIDDEN_CROSSED_STANCE:
+      leg_crossing_risk: "FORBIDDEN"

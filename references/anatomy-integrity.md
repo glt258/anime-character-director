@@ -1,6 +1,6 @@
 # Anatomy Integrity QA
 
-Anatomy Integrity Check is mandatory technical generation QA after S1 Anime 2D Hard Gate and before normal Human Review. It is not an aesthetic Gate, commercial Gate, identity Gate, or style Gate. S1 remains the only visual style hard Gate, and this phase does not modify S1.
+Anatomy Integrity Check is mandatory technical generation QA after the separate S1 Anime 2D Gate and Gacha Rendering Style Gate, and before normal Human Review. It is not an aesthetic Gate or style Gate; it does not modify either visual gate.
 
 ## Inspect what is visible
 
@@ -88,3 +88,7 @@ Hands interact naturally with weapons and objects.
 ```
 
 Do not turn the prompt into an anatomy negative-prompt dump. Do not add an anatomy aesthetic score, face classifier, silhouette classifier, similarity threshold, ML model, external vision API, or training step.
+
+## Leg Separation Hard Gate
+
+Run `LegSeparationGate` before ordinary Anatomy Integrity and before candidate promotion. Inspect thighs, knees, calves, ankles, feet, centerline crossing, and leg negative space as separate evidence fields. `LEG_CROSSING_BLOCKING_FAIL` is blocking at any level; `LEG_OCCLUSION_UNCERTAIN` is also non-promotable because uncertain geometry is treated as FAIL for promotion. A normal production run may perform one pose-only regeneration that preserves identity, outfit, palette, body build, accessories, regional style, fanservice, and background; a second unresolved result becomes `LEG_GEOMETRY_UNRESOLVED`. First-pass benchmark failures remain saved as negative samples and cannot be reported as PASS.

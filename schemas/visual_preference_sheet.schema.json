@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Visual Preference Sheet",
+  "type": "object",
+  "required": ["schema_version", "variables"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "explicit_user_request": {"type": "boolean"},
+    "global_rendering_style": {"type": "string"},
+    "global_rendering_style_source": {"type": "string"},
+    "regional_visual_language": {
+      "enum": [
+        "EAST_ASIAN_CONTEMPORARY_GACHA",
+        "WESTERN_ANIME_INSPIRED",
+        "REGION_NEUTRAL_ANIME",
+        "CUSTOM"
+      ],
+      "default": "EAST_ASIAN_CONTEMPORARY_GACHA"
+    },
+    "regional_visual_language_source": {
+      "enum": [
+        "default_style_policy",
+        "explicit_user_selection",
+        "explicit_user_override",
+        "benchmark_delegation",
+        "migrated_default"
+      ]
+    },
+    "regional_style_override_reason": {"type": "string", "minLength": 1},
+    "pose_family": {"type": "string", "minLength": 1},
+    "pose_intent": {"$ref": "#/$defs/poseIntentType"},
+    "pose_intent_contract": {"$ref": "#/$defs/poseIntentContract"},
+    "pose_intent_gate": {"$ref": "#/$defs/poseIntentGate"},
+    "actual_pose_features": {"$ref": "#/$defs/actualPoseFeatures"},
+    "pose_intent_result": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
+    "pose_intent_failure_type": {"type": "array", "items": {"$ref": "#/$defs/poseIntentFailureType"}},
+    "pose_diversity_ledger": {"$ref": "#/$defs/poseDiversityLedger"},
+    "leg_crossing_risk": {"enum": ["LOW", "MEDIUM", "HIGH", "FORBIDDEN"]},
+    "leg_separation_contract": {"$ref": "#/$defs/legSeparationContract"},
+    "lower_body_visual_variables": {
+      "type": "object",
+      "properties": {
+        "exposure_strategy": {"type": "string"},
+        "legwear_family": {"type": "string"},
+        "leg_accessory_family": {"type": "string"},
+        "footwear_family": {"type": "string"},
+        "foot_visibility": {"type": "string"},
+        "visual_reason": {"type": "string"},
+        "relationship_to_character_style": {"type": "string"},
+        "relationship_to_pose": {"type": "string"},
+        "repetition_risk": {"type": "string"}
+      }
+    },
+    "migration_events": {"type": "array"},
+    "variables": {
+      "type": "object",
+      "required": [
+        "hair_color",
+        "hair_style_family",
+        "outfit_direction",
+        "dominant_palette",
+        "major_accessories",
+        "body_markings",
+        "nonhuman_trait_level",
+        "background_direction"
+      ],
+      "minProperties": 8,
+      "additionalProperties": {"$ref": "#/$defs/variable"}
+    },
+    "optional_variables": {"type": "object"}
+  },
+  "$defs": {
+    "legSeparationContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "thighs_separate",
+        "knees_separate",
+        "calves_separate",
+        "ankles_separate",
+        "feet_separate",
+        "no_centerline_crossing",
+        "no_leg_occlusion_crossing",
+        "readable_negative_space"
+      ],
+      "properties": {
+        "thighs_separate": {"const": true},
+        "knees_separate": {"const": true},
+        "calves_separate": {"const": true},
+        "ankles_separate": {"const": true},
+        "feet_separate": {"const": true},
+        "no_centerline_crossing": {"const": true},
+        "no_leg_occlusion_crossing": {"const": true},
+        "readable_negative_space": {"const": true}
+      }
+    },
+    "poseIntentType": {
+      "enum": [
+        "ELEGANT",
+        "SENSUAL",
+        "RELAXED_ASYMMETRIC",
+        "LOW_ENERGY",
+        "NARROW_STANCE",
+        "ONE_FOOT_FORWARD",
+        "OPEN_STANCE",
+        "WIDE_ACTIVE",
+        "STABLE_OPEN",
+        "CUSTOM",
+        "UNKNOWN_LEGACY_POSE_INTENT"
+      ]
+    },
+    "poseIntentContract": {
+      "type": "object",
+      "required": [
+        "requested_intent",
+        "resolved_pose_family",
+        "required_body_signals",
+        "forbidden_shortcuts",
+        "minimum_visible_signals",
+        "leg_safety_required",
+        "depth_requirement",
+        "stance_width_requirement",
+        "asymmetry_requirement",
+        "energy_level",
+        "torso_requirement",
+        "arm_requirement",
+        "head_requirement"
+      ],
+      "properties": {
+        "requested_intent": {"$ref": "#/$defs/poseIntentType"},
+        "resolved_pose_family": {"type": "string"},
+        "required_body_signals": {"type": "array", "items": {"type": "string"}},
+        "forbidden_shortcuts": {"type": "array", "items": {"type": "string"}},
+        "minimum_visible_signals": {"type": "integer", "minimum": 0},
+        "leg_safety_required": {"const": true},
+        "depth_requirement": {"type": "string"},
+        "stance_width_requirement": {"type": "string"},
+        "asymmetry_requirement": {"type": "string"},
+        "energy_level": {"type": "string"},
+        "torso_requirement": {"type": "string"},
+        "arm_requirement": {"type": "string"},
+        "head_requirement": {"type": "string"}
+      }
+    },
+    "poseIntentGate": {
+      "type": "object",
+      "required": [
+        "actual_image",
+        "requested_intent",
+        "resolved_pose_family",
+        "result",
+        "overall_pose_intent_match",
+        "contract",
+        "stance_width",
+        "foot_depth",
+        "weight_distribution",
+        "knee_state",
+        "torso",
+        "shoulder_relation",
+        "arm_activity",
+        "head_angle",
+        "energy_read",
+        "failure_types",
+        "issues"
+      ],
+      "properties": {
+        "actual_image": {"type": "string", "minLength": 1},
+        "requested_intent": {"$ref": "#/$defs/poseIntentType"},
+        "resolved_pose_family": {"type": "string"},
+        "result": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
+        "overall_pose_intent_match": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
+        "contract": {"$ref": "#/$defs/poseIntentContract"},
+        "stance_width": {"enum": ["NARROW", "NORMAL", "WIDE", "UNCERTAIN"]},
+        "foot_depth": {"enum": ["SAME_PLANE", "FORWARD_LEFT", "FORWARD_RIGHT", "UNCERTAIN"]},
+        "weight_distribution": {"enum": ["CENTERED", "LEFT", "RIGHT", "UNCERTAIN"]},
+        "knee_state": {"enum": ["STRAIGHT", "SOFT", "BENT", "UNCERTAIN"]},
+        "torso": {"enum": ["UPRIGHT", "RELAXED", "TILTED", "FORWARD", "BACK", "UNCERTAIN"]},
+        "shoulder_relation": {"enum": ["LEVEL", "ASYMMETRIC", "RELAXED", "UNCERTAIN"]},
+        "arm_activity": {"enum": ["ACTIVE", "RELAXED", "ASYMMETRIC", "CLOSED", "UNCERTAIN"]},
+        "head_angle": {"enum": ["NEUTRAL", "TILTED", "TURNED", "UNCERTAIN"]},
+        "energy_read": {"enum": ["HIGH", "MEDIUM", "LOW", "UNCERTAIN"]},
+        "matched_signals": {"type": "array", "items": {"type": "string"}},
+        "missing_signals": {"type": "array", "items": {"type": "string"}},
+        "failure_types": {"type": "array", "items": {"$ref": "#/$defs/poseIntentFailureType"}},
+        "issues": {"type": "array", "items": {"type": "string"}},
+        "evidence_source": {"type": "string"}
+      }
+    },
+    "poseIntentFailureType": {
+      "enum": [
+        "POSE_INTENT_FAIL",
+        "POSE_SEMANTIC_EROSION",
+        "POSE_SAFETY_OVERCONSTRAINT",
+        "NARROW_STANCE_EXPANDED",
+        "ONE_FOOT_FORWARD_DEPTH_MISSING",
+        "LOW_ENERGY_READ_MISSING",
+        "SENSUAL_POSE_REDUCED_TO_OUTFIT",
+        "ELEGANT_POSE_REDUCED_TO_NEUTRAL",
+        "RELAXED_ASYMMETRY_MISSING"
+      ]
+    },
+    "actualPoseFeatures": {
+      "type": "object",
+      "properties": {
+        "stance_width": {"type": "string"},
+        "foot_depth": {"type": "string"},
+        "weight_distribution": {"type": "string"},
+        "knee_state": {"type": "string"},
+        "torso": {"type": "string"},
+        "shoulder_relation": {"type": "string"},
+        "arm_activity": {"type": "string"},
+        "head_angle": {"type": "string"},
+        "energy_read": {"type": "string"}
+      }
+    },
+    "poseDiversityLedger": {
+      "type": "object",
+      "required": ["fields", "records"],
+      "properties": {
+        "fields": {"type": "array", "items": {"type": "string"}},
+        "records": {"type": "array", "items": {"$ref": "#/$defs/actualPoseFeatures"}},
+        "homogenization": {"type": "object"}
+      }
+    },
+    "variable": {
+      "type": "object",
+      "required": ["variable", "recommended", "recommendation_reason", "options", "allow_custom", "allow_ai_delegate", "user_selection", "locked"],
+      "properties": {
+        "variable": {"type": "string"},
+        "recommended": {},
+        "recommendation_reason": {"type": "string", "minLength": 1},
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "value", "reason", "diversity_risk"],
+            "properties": {
+              "id": {"type": "string"},
+              "value": {},
+              "reason": {"type": "string"},
+              "diversity_risk": {"enum": ["low", "medium", "high"]}
+            }
+          }
+        },
+        "allow_custom": {"type": "boolean"},
+        "allow_ai_delegate": {"type": "boolean"},
+        "user_selection": {},
+        "selection_source": {"enum": ["user", "mix", "custom", "ai_delegate", null]},
+        "locked": {"type": "boolean"}
+      }
+    }
+  }
+}

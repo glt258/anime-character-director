@@ -26,6 +26,16 @@
 
 任何下游 Agent 都不得把本宪章降级为普通 prompt 文本、建议项或可编辑的 `style` 参数。
 
+## 2A. HARD NO-CROSSED-LEGS INVARIANT
+
+`NO_CROSSED_LEGS_HARD_INVARIANT = true` is a global generation invariant for normal two-legged humanoid anatomy. No user prompt, Visual Preference, Character Visual Style, Regional Style, Fanservice, or Pose Style may override it. The `LegSeparationContract` requires separate thighs, knees, calves, ankles, and feet, no centerline crossing, no leg-occlusion crossing, and readable negative space. `LegSeparationGate` runs on actual-image evidence; `FAIL` and `UNCERTAIN` block candidate promotion. See `runtime/leg_separation_runtime.py` and `schemas/regional_style.schema.json`.
+
+### 2B. POSE INTENT PRESERVATION
+
+`PoseIntentContract` is a separate semantic contract. It records the requested intent, resolved safe family, required body-language signals, minimum visible signals, width/depth/asymmetry/energy/torso/arm/head requirements, and forbidden shortcuts. `PoseIntentGate` evaluates actual-image evidence; it does not infer success from prompt text. `POSE_VALID` requires both a passing `LegSeparationGate` and a `STRONG` or `ACCEPTABLE` `PoseIntentGate` result. A semantic miss remains `POSE_INTENT_FAIL`, not an anatomy failure.
+
+The intent layer preserves elegant posture and asymmetry, sensual body confidence beyond clothing, relaxed asymmetry, low-energy signals, genuinely narrow stance, and genuine forward-foot depth. It cannot weaken the no-crossed-legs invariant. Pose-intent-only repair may change body language, stance width, foot depth, torso, shoulders, arms, head, and energy, then must rerun the leg gate. `PoseDiversityLedger` reports non-blocking safe-pose homogenization.
+
 ## 3. 核心视觉定义
 
 ### S1 Unmistakably Anime 2D hard gate
@@ -123,3 +133,43 @@ Critic 的第一步永远是 STYLE GATE。只有通过 STYLE GATE，才允许评
 5. 未出现被禁止的主导审美，且已通过 STYLE GATE。
 
 任一条件失败，输出只能标记为 `REJECT` 或 `REVISION_REQUIRED`，不得以“角色设计分数高”抵消风格失败。
+
+## 9. Global Rendering Style 与 Gacha Style Gate
+
+S1 Anime 2D Gate 与 Gacha Rendering Style Gate 是两个独立判断：S1 只确认二次元 2D 媒介；Gacha Gate 判断图片是否读作现代商业二游可玩角色立绘。因而一张图可以 S1 `PASS`，但因 editorial、character sheet、poster 或 concept-art 漂移而在 Gacha Gate `FAIL`。
+
+默认 Global Rendering Style 为 `CONTEMPORARY_COMMERCIAL_GACHA_ANIME`，由 Policy 和 PromptCompiler 注入。它约束面部精修、材质区分、光影层级、渲染密度、焦点层级和商业角色卡面/standee presentation；它不限制角色内部的 Character Visual Style 多样性。
+
+只有用户明确提出其他渲染媒介时才允许 override，并记录 `global_rendering_style_source: explicit_user_preference`。角色的 `minimalist`、`geometric`、`sporty` 或 `editorial` 只改变设计语言，不自动改成极简时装插画、平面海报或运动番设定图。
+
+## 10. Regional Visual Language
+
+“Anime” is a medium family, not a sufficient commercial style definition. “Commercial gacha” alone does not guarantee the intended regional visual language. The style architecture is:
+
+1. `Global Rendering Style` — rendering medium and finish, default `CONTEMPORARY_COMMERCIAL_GACHA_ANIME`.
+2. `Regional Visual Language` — commercial illustration grammar, default `EAST_ASIAN_CONTEMPORARY_GACHA`.
+3. `Character Visual Style` — the character's own language, such as elegant, street, sporty, gothic, sensual, quiet, or strange.
+
+Priority is explicit user style override → Global Rendering Style → Regional Visual Language → Character Visual Style → identity and implementation. Character Visual Style cannot replace the regional layer. The default regional layer is compiled as structured positive constraints: anime-first facial abstraction, restrained facial planes, modern East-Asian commercial gacha illustration grammar, stylized anatomically coherent bodies, character-design-first outfit construction, premium material separation, polished anime game lighting, and finished playable-character presentation.
+
+Regional visual language is not character ethnicity. It governs illustration grammar, anime abstraction, rendering hierarchy, design grammar, and commercial presentation—not ethnicity, nationality, skin tone, occupation, world setting, or costume culture. Dark-skinned, tan, fantasy-ethnicity, European-fantasy, desert, aquatic, sci-fi, and beast-trait characters remain valid. East-Asian visual language must not silently become hanfu, kimono, qipao, sash, tassel, robe, or pseudo-oriental fantasy costume.
+
+The regional layer protects diversity: mature men may remain elegant, slender, broad, rough, or older-looking without western superhero anatomy; mature women may remain mature, sensual, authoritative, or strong without infantile facial construction. Strong women express strength through shoulders, back, core, thighs, posture, stance, and outfit tension; `strength` is not a license for superhero or bodybuilder massing.
+
+`RegionalStyleCritic` reviews the actual image, not the prompt. It records regional match, East-Asian gacha read, western-anime drift, western-concept-art drift, facial abstraction, body rendering, costume language, presentation, confidence, and result. `GachaStyleCritic` keeps the Global stage and adds Regional stage B; `STYLE_VALID` requires Global PASS and Regional PASS-equivalent. New drift types include `WESTERN_ANIME_STYLE_DRIFT`, `WESTERN_FANTASY_CONCEPT_DRIFT`, `WESTERN_SUPERHERO_ANATOMY_DRIFT`, `PSEUDO_ORIENTAL_FANTASY_DEFAULT`, `GENERIC_FANTASY_RPG_DRIFT`, `CHARACTER_SHEET_PRESENTATION_DRIFT`, `OUTFIT_FAMILY_COLLAPSE`, `BACKGROUND_PRESENTATION_COLLAPSE`, and `REGIONAL_STYLE_INFANTILIZATION`.
+
+`Outfit Family Ledger` records outfit family, neckline, upper/lower structure, outer layer, waist, hanging cloth, cape, sash, trim, footwear, exposure, and legwear. Repetition across four or more images is a non-blocking `OUTFIT_FAMILY_COLLAPSE` diagnostic unless the user explicitly requested a uniform. Background fields have a separate non-blocking `BACKGROUND_PRESENTATION_COLLAPSE` diagnostic. `GENERIC_FANTASY_RPG_DRIFT` and `ARCHETYPE_SHORTCUT_REPLACEMENT` identify cliché replacement without banning a justified character-specific design. The current six archetype images are negative regression fixtures and human-labeled evidence only; they are not positive exemplars and must not be passed as future image references.
+
+The default is recorded as `regional_visual_language_source: default_style_policy`. An explicit user request such as “western anime-inspired” records `regional_visual_language_source: explicit_user_override` plus a reason. Old artifacts without the field migrate in memory to the current policy default with `source: migrated_default`; old files are not rewritten. Formal contracts use generic visual descriptors, not named-game or named-artist imitation.
+
+Migration records the old artifact version, effective regional value, provenance, timestamp, and whether a later user override occurred. `explicit_user_selection` and `benchmark_delegation` are valid provenance states and are not silently rewritten as human overrides.
+
+## 11. Lower-Body Visual Design Space
+
+Modesty is not the default solution to character design. Lower-body exposure, hosiery, leg accessories, open footwear, and barefoot designs are valid character-design tools for silhouette, personality, movement, sensuality, elegance, fantasy, and identity. Anti-template rules prevent repetitive sexualization patterns; they must not suppress adult sensual, stylish, or unconventional choices.
+
+The formal lower-body variables are `exposure_strategy`, `legwear_family`, `leg_accessory_family`, `footwear_family`, `foot_visibility`, `visual_reason`, `relationship_to_character_style`, `relationship_to_pose`, and `repetition_risk`. The vocabulary is open-ended; the listed families are design language, not a closed enum and not a demand for novelty.
+
+Adult characters may use sheer/opaque/patterned/colored tights, thigh-highs, leg rings, straps, bare thighs, barefoot construction, sandals, flats, heels, sneakers, boots, asymmetry, or other coherent choices. Male characters receive the same design space and must not default to trousers plus boots. Clearly juvenile characters may use ordinary socks, tights, sandals, sneakers, or barefoot designs, but not fetishized garters, sexualized stocking framing, or erotic leg emphasis. Fanservice level and lower-body coverage are independent variables.
+
+`LowerBodyDesignReview` checks the selected variables, design reasons, style/pose relationship, repetition risk, and genericness risk. A generic pants-plus-boots pair without a character-specific reason receives a risk note, not an automatic rejection. `Visual Grounding QA` compares Final Design with the actual image: barefoot rendered as boots is `FOOTWEAR_GROUNDING_FAIL`, selected legwear rendered as bare legs is `LEGWEAR_GROUNDING_FAIL`, and a missing leg accessory is `LOWER_BODY_ANCHOR_MISS`.

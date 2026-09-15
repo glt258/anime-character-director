@@ -1,6 +1,6 @@
 # Anime Character Director
 
-**A Codex-native Skill for human-guided 2D anime gacha character design and art direction.**
+**A Codex-native, human-in-the-loop Skill for designing original 2D anime / gacha character standees and maintaining character identity across controlled visual variations.**
 
 **From generic AI anime characters to identity-driven contemporary gacha character design.**
 
@@ -111,9 +111,15 @@ Character Planning
     ↓
 4 Art Directions
     ↓
-Human Select / Mix
+    Human Select / Mix
     ↓
-Final Visual Direction
+    Visual Preference Sheet
+    ↓
+    Human Select / Mix / Custom / Delegate
+    ↓
+    Human Audit + Visual Preferences Locked
+    ↓
+    Final Visual Direction
     ↓
 $imagegen
     ↓
@@ -130,25 +136,55 @@ Mixing is a first-class workflow, not an exception. For example, a human may kee
 
 ## Major design features
 
-### Anime 2D Hard Gate
+### Character Design
 
-Preserves unmistakable 2D anime abstraction and avoids photorealism, semi-realistic drift, and 3D-render aesthetics.
+Design original adult 2D anime/gacha characters from premise, identity, silhouette, costume architecture, fantasy logic, and player-facing appeal.
 
 ### Human-Guided Creative Expansion
 
-Interactive CREATE expands 4–6 Character Directions by defaulting to five, then presents 4–6 Art Directions by defaulting to four. It pauses at both Human selection checkpoints and does not silently choose taste.
+Interactive CREATE expands 4–6 Character Directions by defaulting to five, then presents 4–6 Art Directions by defaulting to four. It pauses at Human selection checkpoints and does not silently choose taste.
 
-### Front-Facing Character Standee
+### Standee-First Art Direction
 
-The main body stays frontal for standard character illustration. Dynamism comes from arms, hair, cloth, weapons, VFX, and secondary silhouettes instead of rotating the torso into an unreadable 3/4 pose.
+The default deliverable is a clear, recognizable, reusable character standee. Character identity comes before cinematic presentation; scene-heavy art is an explicit extension.
 
-### Contemporary Gacha Design Principle
+### Front-Facing Standee
 
-Identity comes before pagegame luxury: macro shapes, head identity, costume architecture, detail islands, controlled color architecture, material hierarchy, and one primary iconic anchor. Adult sensuality remains available without using ornament stacking as a rarity signal.
+The main body stays readable from the front for standard standees. Dynamism comes from arms, hair, cloth, weapons, effects, asymmetry, and controlled weight shifts rather than unreadable torso rotation.
 
-### Structural Fantasy Design
+### Contemporary Gacha Design
 
-Abilities enter silhouette, body, costume, negative space, and shape language instead of becoming only glow, crystals, shards, or generic VFX.
+Identity comes before pagegame luxury: macro shapes, head identity, costume architecture, detail islands, controlled color architecture, material hierarchy, and one primary iconic anchor.
+
+### Identity Pass
+
+The lightweight Identity Pass turns a selected direction into a specific woman before generation and records what must remain recognizable.
+
+### Character Canon
+
+Human-approved Canon and a Master Reference anchor later visual variations without silently redesigning the character.
+
+### Same-Character Standee
+
+Canon-preserving portraits, half bodies, expressions, front/side/back references, and standee pose variants keep identity stable across presentations.
+
+### Variants
+
+Controlled hair, expression, pose, costume, legwear, footwear, color, silhouette, accessory, and fantasy-structure variations remain branchable and Human-selectable.
+
+`standee_pose_variant` is the pose-focused subtype inside `variants`: four text-only standing-pose options come first, Human chooses or mixes, and only then is the selected standee generated.
+
+### Anatomy Integrity
+
+Post-generation technical QA separates visible anatomy failures from aesthetic preferences and keeps repairs bounded to anatomy.
+
+### Human Authority
+
+AI expands, compares, critiques, and recommends; Human selects, mixes, approves, rejects, and decides Canon.
+
+### Optional Presentation Extensions
+
+Promotional key art, combat art, ultimate art, story illustration, and cinematic compositions are supported only when explicitly requested. They are not additional modes or the default product scope.
 
 ## Installation
 
@@ -190,9 +226,13 @@ The Skill stops after Character Explore until Human selection. After selection i
 
 ## Runtime and boundaries
 
-This package is the reusable Codex Skill layer. It bundles the human-readable Anime Style Constitution and its machine-readable style policy, but does not bundle the benchmark project's Python Runtime, planning schemas, tests, caches, private artifacts, external Agent, server, LLM API wrapper, image API, or ComfyUI pipeline. A host project may provide a local Runtime preflight; the Skill's creative behavior remains usable without copying the entire benchmark repository.
+This package is the reusable Codex Skill layer. It bundles the human-readable Anime Style Constitution, machine-readable style policy, Visual Preference runtime gate, preference schema, report format, and focused tests. It does not bundle an external Agent, server, LLM API wrapper, image API, or ComfyUI pipeline. A host project may add a larger Runtime preflight around the bundled ownership gate.
 
 S1 Anime 2D Hard Gate remains the only current visual hard gate. The Commercial Gacha Profile is vocabulary and possibility expansion, not a second gate. After generation, present the image and stop for Human Review; do not automatically redesign, regenerate, optimize, or score commercial appeal.
+
+## Change Reporting Contract
+
+Every development response states, briefly and in plain Chinese: **这次在干什么**, **为什么要改**, **这次具体改了什么**, **这次没动什么**, **检查结果**, **现在项目到哪了**, and **下一步**. Explain the effect before file names, and translate technical English on first use when useful. This keeps the Human informed about scope and state; it does not create a new runtime gate.
 
 ## Image generation
 
@@ -200,9 +240,11 @@ Anime Character Director is designed to work with Codex built-in `$imagegen`. It
 
 ## Current Status
 
-Implemented: Anime 2D Hard Gate guidance; Human-guided Character and Art Direction expansion; Human selection and mixing; Front-Facing Character Standee guidance; Contemporary Gacha Design Principle; Macro-first design; Detail Islands; Color Architecture; Material Hierarchy; Structural Fantasy Design; One Primary Iconic Anchor; optional auto planning mode; and Codex built-in `$imagegen` integration.
+Pose System v1 is `ACCEPTED / FROZEN` for the current fast-generation production baseline. See [Pose System v1 Acceptance](docs/POSE_SYSTEM_V1_ACCEPTANCE.md). This is an accepted baseline, not a claim that every future pose problem is completely solved; detailed pose refinement remains a separate future mode.
 
-The Commercial Gacha Visual Profile is creative vocabulary only, not a hard Gate 2.
+Implemented: Standee-first product scope; Anime 2D Hard Gate guidance; Human-guided Character and Art Direction expansion; Human selection and mixing; Design Ownership Policy; Visual Preference Gate; Visual Preference Sheet and report; Visual Diversity Control; Human Audit Policy; Front-Facing Character Standee guidance; Contemporary Gacha Design Principle; Identity Pass; Character Canon; Same-Character Standee; controlled Variants including four-direction `standee_pose_variant` planning; Anatomy Integrity; Human Authority; Optional Presentation Extensions; Macro-first design; Detail Islands; Color Architecture; Material Hierarchy; Structural Fantasy Design; One Primary Iconic Anchor; plain-Chinese Change Reporting Contract; optional auto planning mode; and Codex built-in `$imagegen` integration.
+
+The historical Commercial Gacha Visual Profile remains vocabulary/reference material. The runtime Gacha Rendering Style Gate now has Global and Regional stages; both must pass before `STYLE_VALID`.
 
 ## Disclaimer
 
@@ -219,6 +261,10 @@ anime-character-director/
 │  └─ openai.yaml
 ├─ config/
 │  └─ anime_style_policy.yaml
+├─ schemas/
+│  └─ visual_preference_sheet.schema.json
+├─ runtime/
+│  └─ visual_preference_runtime.py
 ├─ docs/
 │  └─ ANIME_STYLE_CONTRACT.md
 ├─ references/
