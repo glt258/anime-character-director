@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0] — 2026-09-16
+
+Status: `ANIME_CHARACTER_DIRECTOR = RELEASED`
+
+Previous version: `v1.0.0` (real Git tag; no separate GitHub Release object was present). This release is a public README, asset, benchmark-summary, and release-documentation rewrite; it does not add a new creation mode or experimental runtime feature.
+
+### Added
+
+- User-facing README hero, four-image v2 Gallery, three-mode explanations, bilingual Quick Start, architecture overview, quality boundaries, and Known Limitations.
+- Clean public image assets under `docs/assets/readme/` plus two explicitly labeled historical evolution images.
+- Expanded Generation Quality Benchmark v2 Summary with mode averages, replay disclosure, constraint results, and post-v1 research boundary.
+
+### Fixed
+
+- Removed development-log ordering and stale release wording from the public README.
+- Clarified that USER_DECIDE benchmark rows replay previously recorded real-human selections rather than claiming four new live UI sessions.
+- Moved diversity, visual-prior, pose-vocabulary, and LoRA step1000 work into `POST_V1_RESEARCH` instead of presenting it as a release blocker.
+
 ## v1.0.0 — 2026-09-16
 
 Status: `ANIME_CHARACTER_DIRECTOR_V1_0_0 = RELEASED`

@@ -10,11 +10,11 @@ related: ["[[00-overview]]", "[[experiments/benchmark-status]]"]
 
 # Current Roadmap
 
-`ANIME_CHARACTER_DIRECTOR_V1_0_0 = RELEASED`. The v1.0.0 public surface is frozen to `QUICK`, `AI_DECIDE`, and `USER_DECIDE`; the default is `AI_DECIDE`. The items below are retained implementation history and post-v1 research context, not release blockers.
+`ANIME_CHARACTER_DIRECTOR = RELEASED` at `v1.1.0`. The public surface remains frozen to `QUICK`, `AI_DECIDE`, and `USER_DECIDE`; the default is `AI_DECIDE`. The items below are retained implementation history and post-v1 research context, not release blockers.
 
 ## Post-v1 roadmap
 
-Post-v1 work may address global design diversity, silver/white-hair bias, outfit-template bias, pose-vocabulary expansion, base-model visual-prior analysis, LoRA step1000 evaluation, a broader 20–30 character diversity benchmark, stronger memory anchors, more aggressive silhouette diversity, and splash-art montage shortcuts. None is part of the v1.0.0 release gate.
+Post-v1 work may address global design diversity, silver/white-hair bias, outfit-template bias, pose-vocabulary expansion, base-model visual-prior analysis, LoRA step1000 evaluation, a broader 20–30 character diversity benchmark, stronger memory anchors, more aggressive silhouette diversity, and splash-art montage shortcuts. None is a current public-release blocker.
 
 The runtime should continue to expose hashes, lineage, checkpoints, and retry scope. Image-generation variability and human review capacity remain known research risks; external autonomous agents and unverified API behavior remain outside the project contract.
 

@@ -3,14 +3,14 @@ title: Benchmark Status
 description: What current reports and tests establish about identity, anatomy, modes, and visual preference.
 tags: [experiment, benchmark, evidence]
 sources: ["[[reports]]", "[[tests]]", "[[references/benchmark-spec.md]]", "[[references/visual-preference-model.md]]", "2026-09-15/pose_system_v1_human_acceptance.md"]
-updated: 2026-09-15
+updated: 2026-09-16
 type: experiment
 related: ["[[constraints/anime-style-and-identity]]", "[[constraints/anatomy-pose-and-footwear]]"]
 ---
 
 # Benchmark Status
 
-The repository contains local phase reports and tests for identity, anatomy, operating modes, variants, and Visual Preference behavior. Metrics are valid only in the scope of the named artifact, runtime version, inputs, and evaluation protocol.
+The repository contains local phase reports and tests for identity, anatomy, operating modes, variants, and Visual Preference behavior. Metrics are valid only in the scope of the named artifact, runtime version, inputs, and evaluation protocol. The current public documentation release is `v1.1.0`; benchmark artifacts remain internal evidence.
 
 ## Generation Quality Benchmark v2 gate status — 2026-09-16
 
