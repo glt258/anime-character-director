@@ -1,24 +1,28 @@
 # Interaction Workflow
 
-The Skill owns the conversation; `runtime/interaction_runtime.py` owns the resumable state machine. A session is created once, persisted after every gate resolution, and resumed by `InteractionEvent`.
+The Skill owns the conversation; `runtime/interaction_runtime.py` owns the shared resumable state machine, and `runtime/workflow_runner.py` owns the product-level continuation lifecycle. A character creation is one `WorkflowRun`, persisted across turns and process restarts. A Gate is an `InteractionCheckpoint`, not a task termination.
 
 ## Lifecycle
 
 ```text
-create_session(input, mode?)
+start_workflow(input, mode?)
+  → create one WorkflowRun and one underlying session
   → choose QUICK / AI_DECIDE / USER_DECIDE
   → run shared pipeline
-  → wait at a User Decide gate or return GENERATION_READY
+  → return an InteractionCheckpoint or GENERATION_READY
 
-resume_session(session_id, event)
-  → validate session and current gate_id
-  → deduplicate event_id
-  → apply action
-  → save session before continuing
-  → run until next unresolved gate or GENERATION_READY
+continue_workflow(run_id, user_message)
+  → load the active WorkflowRun and open checkpoint
+  → parse ordinary language and validate the checkpoint
+  → resolve, persist, and continue the same pipeline
+  → return the next checkpoint or GENERATION_READY
 ```
 
-The persisted directory is `sessions/<session_id>/` with `session.json`, `events.jsonl`, and an `artifacts/` directory reserved for handoff artifacts. Saves use a temporary file followed by replacement so a process interruption does not lose a resolved gate.
+The underlying `create_session` and `resume_session` APIs remain available for deterministic integrations. Normal Skill conversation uses the runner so the user never needs to mention `resume`, `session_id`, `gate_id`, or `continue`.
+
+The persisted directory is `sessions/<session_id>/` with `workflow_run.json`, `session.json`, `events.jsonl`, `checkpoints.jsonl`, and an `artifacts/` directory reserved for handoff artifacts. Workflow and session JSON use temporary files followed by replacement so a process interruption does not lose a resolved gate.
+
+`WorkflowRun.status = WAITING_FOR_INTERACTION` means the run is still active. `continue_active_workflow(message)` routes a short reply to the most recently updated waiting run. Explicit cancellation plus a new-role request cancels the old run before starting a new one.
 
 ## Gates and statuses
 
@@ -29,6 +33,8 @@ The session also uses `CREATED`, `RUNNING`, `FINAL_DESIGNING`, `DESIGN_VALIDATIN
 ## Actions
 
 Candidate gates accept `SELECT`, `MIX`, `CUSTOM`, `DELEGATE`, `PARTIAL_DELEGATE`, `USE_RECOMMENDED`, `USE_ALL_RECOMMENDED`, `REGENERATE_OPTIONS`, and `BACK`. The Visual Preference Sheet additionally accepts field-level versions of `SELECT`, `MIX`, `CUSTOM`, `USE_RECOMMENDED`, `CONSTRAINT_UPDATE`, and the batch `USE_ALL_RECOMMENDED` form. Natural-language parsing maps ordinary user replies to these actions; `QUESTION_ONLY` never advances or locks a gate.
+
+The runner adds an extra `__CUSTOM__` option after all real candidates; selecting it opens a Custom Input checkpoint in the same WorkflowRun. Direct custom language is accepted without selecting the option.
 
 An event for an old `gate_id` returns `STALE_GATE_EVENT` and cannot mutate the session. A repeated `event_id` returns its original response and is not appended to `events.jsonl` again. Invalid actions are rolled back from an in-memory snapshot and return `INVALID_INTERACTION`.
 

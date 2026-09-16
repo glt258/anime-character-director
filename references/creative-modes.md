@@ -2,7 +2,7 @@
 
 `anime-character-director` is one Codex Skill with three top-level creation modes. Repair, variant, same-character, and critique are post-generation actions, not creation modes.
 
-Interaction System v1 is `ACCEPTED / FROZEN`; the accepted production baseline for the current interaction scope is recorded in [Three-Mode Interaction System v1 Acceptance](../docs/THREE_MODE_INTERACTION_V1_ACCEPTANCE.md). Future complex ambiguity, additional languages, extreme long input, and UI polish remain non-blocking extensions.
+Interaction System v1 and Persistent Interactive Workflow Runner v1 are `ACCEPTED / FROZEN`. The accepted production baseline for the current interaction scope is recorded in [Three-Mode Interaction System v1 Acceptance](../docs/THREE_MODE_INTERACTION_V1_ACCEPTANCE.md).
 
 | Mode | Goal | Exploration | Gate strategy | End state |
 |---|---|---|---|---|
@@ -42,11 +42,11 @@ The pipeline asks a `GateResolver` to resolve a gate. It does not contain `if mo
 
 Natural-language replies map to the same actions: `B`, `第二个`, `A 和 C 混一下`, field-level updates, `你来决定`, `其他按推荐`, `返回上一步`, and `都不喜欢，换一批`. Questions do not select or advance, and ambiguous input asks for a minimal clarification.
 
-`SELECT B` locks one candidate and immediately resumes the same session. `MIX A+C` creates a composite direction without rerunning exploration. `CUSTOM` stores a human-written direction. `DELEGATE` delegates the current gate; `PARTIAL_DELEGATE` keeps named fields human-owned and delegates the rest. `USE_RECOMMENDED` accepts one proposal, while `USE_ALL_RECOMMENDED` accepts the whole visible sheet in one event.
+`SELECT B` locks one candidate and immediately resumes the same WorkflowRun. `MIX A+C` creates a composite direction without rerunning exploration. `CUSTOM` stores a human-written direction; the runner exposes it as an extra option after every real candidate and opens a same-run Custom Input checkpoint. Direct custom language is also accepted. `DELEGATE` delegates the current gate; `PARTIAL_DELEGATE` keeps named fields human-owned and delegates the rest. `USE_RECOMMENDED` accepts one proposal, while `USE_ALL_RECOMMENDED` accepts the whole visible sheet in one event.
 
 Explicit positive and negative constraints are extracted before exploration. Later-field constraints remain pending until the Visual Preference Sheet opens, then lock with `explicit_user` provenance and are not re-asked.
 
-Recommendations remain unresolved until accepted. User-facing output is natural language with compact options; the persisted sheet and audit remain structured JSON.
+Recommendations remain unresolved until accepted. User-facing output is localized natural language with compact options; the persisted sheet, audit, WorkflowRun, and checkpoints remain structured JSON. `A/B/C/D/E` are display positions; `__CUSTOM__` is the stable internal custom option id.
 
 `BACK` creates a rollback event. Moving from Art to Character invalidates Character Plan, Art Explore, Art Selection, Visual Preferences, Final Design, and Prompt, while retaining the original input, interaction history, and previous choices. A visual-preference-only change invalidates Final Design and Prompt only.
 
@@ -56,4 +56,4 @@ Important sources are `explicit_user`, `quick_ai_fill`, `delegated_ai`, `policy_
 
 ## Boundary
 
-All three modes retain the default Global Rendering Style, Regional Visual Language, Lower-Body rules, hard no-crossed-legs Pose System, and Prompt Audit. This phase stops at `GENERATION_READY`; it never calls `$imagegen`.
+All three modes retain the default Global Rendering Style, Regional Visual Language, Lower-Body rules, hard no-crossed-legs Pose System, and Prompt Audit. The local runner stops at `GENERATION_READY`; the Codex Skill then owns the validated handoff to built-in `$imagegen` and post-generation quality audit.

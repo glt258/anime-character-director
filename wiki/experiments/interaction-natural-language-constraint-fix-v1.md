@@ -4,7 +4,7 @@ title: Interaction Natural Language Layer and Constraint Preservation Fix v1
 status: accepted
 confidence: high
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-16
 tags: [interaction, natural-language, constraints, provenance, regression]
 related: ["[[architecture/interaction-system]]", "[[roadmap/current]]", "[[experiments/three-mode-interaction-ux-acceptance-v1]]"]
 sources: ["[[docs/INTERACTION_SYSTEM]]", "[[SKILL]]", "[[runtime/interaction_runtime.py]]", "[[runtime/natural_language_interaction.py]]", "[[scripts/run_three_mode_ux_acceptance_v1.py]]"]
@@ -27,6 +27,10 @@ Explicit positive and negative requirements are extracted before exploration. A 
 - Focused parser/runtime regression tests cover the new intent types, provenance, pending constraints, no-reask behavior, mode switching, cancellation, regeneration, stale events, idempotency, and legacy loading.
 - The prior 43-scenario UX run remains the baseline evidence: 10 PASS and 33 FAIL before this implementation. The post-fix exact-scenario rerun is the acceptance evidence for this page.
 - No image generation or `$imagegen` call is part of this change.
+
+## Regression fix: `NEGATION_CONSTRAINT_PARSER_FIX_V1`
+
+On 2026-09-16, a blocker was found in compound negation: `不要粉色长发` could be written as positive `hair_color` and `hair_style_family` fields. The scoped regression fix now records one same-entity `prohibited_constraints` combination, suppresses the matching positive fields, and preserves the combination through `final_design` and the compiled prompt. Character D keeps `pink long hair`, `white dress`, `lace`, and `soft-girl styling` as semantic units; Character C and B keep archetype boundaries; Character A keeps black stockings, high heels, and crossed legs independent. Recommendation aliases apply only to unresolved fields. See `NEGATION_SCOPE_REGRESSION_AUDIT.md`; no image generation was performed.
 
 ## Disposition
 

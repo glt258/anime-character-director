@@ -3,16 +3,20 @@ title: Current Roadmap
 description: Explicit next steps and blockers for the character director workflow.
 tags: [roadmap, future-work]
 sources: ["[[README.md]]", "[[SKILL.md]]", "[[reports]]", "2026-09-14/regional_visual_language_layer_request.md"]
-updated: 2026-09-15
+updated: 2026-09-16
 type: roadmap
 related: ["[[00-overview]]", "[[experiments/benchmark-status]]"]
 ---
 
 # Current Roadmap
 
-Near-term work is to strengthen head and costume identity, integrate fantasy elements without losing identity anchors, make anatomy and identity artifacts repeatable, and control visual diversity without erasing user choice.
+`ANIME_CHARACTER_DIRECTOR_V1_0_0 = RELEASED`. The v1.0.0 public surface is frozen to `QUICK`, `AI_DECIDE`, and `USER_DECIDE`; the default is `AI_DECIDE`. The items below are retained implementation history and post-v1 research context, not release blockers.
 
-The runtime should continue to expose hashes, lineage, checkpoints, and retry scope. Current blockers are image-generation variability and human review capacity. External autonomous agents and unverified API behavior remain outside the project contract.
+## Post-v1 roadmap
+
+Post-v1 work may address global design diversity, silver/white-hair bias, outfit-template bias, pose-vocabulary expansion, base-model visual-prior analysis, LoRA step1000 evaluation, a broader 20–30 character diversity benchmark, stronger memory anchors, more aggressive silhouette diversity, and splash-art montage shortcuts. None is part of the v1.0.0 release gate.
+
+The runtime should continue to expose hashes, lineage, checkpoints, and retry scope. Image-generation variability and human review capacity remain known research risks; external autonomous agents and unverified API behavior remain outside the project contract.
 
 The Regional Visual Language Layer is now implemented and the six archetype images are registered as negative regression metadata rather than positive references. Next: complete Human Review of the six-case [[experiments/character-archetype-generalization-v1]] result, then run a separately approved regression benchmark using fresh images and independently labeled regional/style observations. Do not use the current negative fixtures as ImageGen references.
 
@@ -41,3 +45,9 @@ Interaction System + Three Creation Modes v1 is accepted and frozen as `THREE_MO
 The 2026-09-15 Three Mode Interaction UX Acceptance v1 baseline remains historical: 43 scenarios, 10 PASS and 33 FAIL before the natural-language fix. The fix adds a deterministic parser, pending later-field constraints, no-reask locking, recommendation-vs-delegation provenance, cancellation, regeneration, and natural mode switches. The exact 43-scenario post-fix rerun passed and Human Review accepted the interaction contract; no image generation was started.
 
 The post-fix exact 43-scenario rerun passed 43/43, and Human Review accepted the interaction contract as `THREE_MODE_INTERACTION_SYSTEM_V1_ACCEPTED` / `ACCEPTED / FROZEN`. Focused parser/runtime regression passed 47 tests. The next stage is recorded as `THREE_MODE_GENERATION_QUALITY_BENCHMARK`, but it must not start automatically.
+
+The Generation Quality Benchmark v1 was intentionally aborted after 8/8 QUICK and AI_DECIDE first-pass images because USER_DECIDE gates were being treated as task termination points. The eight images and artifacts are retained; the old Brief A USER_DECIDE run is marked superseded. Persistent Interactive Workflow Runner v1 keeps one `WorkflowRun` across checkpoints, restarts, Custom Input, and localized continuation. Human Acceptance v1 passed HA-01 through HA-15 plus the required exception scenarios on 2026-09-15, with zero observed image-generation calls. The project state is now `PERSISTENT_INTERACTIVE_WORKFLOW_V1_ACCEPTED`; `GENERATION_QUALITY_BENCHMARK_UNBLOCKED` is the next-stage recommendation and requires explicit authorization before starting.
+
+Codex-native interaction integration v1 is released as a presentation/orchestration adapter. `runtime/codex_interaction_adapter.py` converts persisted USER_DECIDE checkpoints to three-choice `request_user_input` specs, keeps stable candidate ids separate from localized labels, maps native Other to `__CUSTOM__`, and fails closed for invalid or stale answers. `PersistentWorkflowRunner.continue_native_workflow` continues the same WorkflowRun to the next checkpoint or `GENERATION_READY`.
+
+The 2026-09-16 `NEGATION_SCOPE_AND_RECOMMENDATION_REGRESSION_FIX_V1` passed its full regression gate: `不要粉色长发` is one same-entity prohibited combination, Character A/B/C boundaries and atomic rules are retained, and recommendation aliases apply only to unresolved fields. Generation Quality Benchmark v2 is now `COMPLETE_WITH_REPLAYED_USER_DECIDE_DISCLOSURE`; its remaining research is post-v1.

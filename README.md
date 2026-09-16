@@ -1,8 +1,26 @@
-# Anime Character Director
+# anime-character-director
 
-**A Codex-native, human-in-the-loop Skill for designing original 2D anime / gacha character standees and maintaining character identity across controlled visual variations.**
+`A Codex Skill for designing and generating production-oriented commercial anime/gacha game characters.`
 
-**From generic AI anime characters to identity-driven contemporary gacha character design.**
+**v1.0.0 — `ANIME_CHARACTER_DIRECTOR_V1_0_0 = RELEASED`**
+
+Anime Character Director turns one character request into a coherent commercial 2D anime-game character design and, after the design is resolved, a Codex built-in `$imagegen` result with technical quality checks. The default mode is `AI_DECIDE`.
+
+## Three Creation Modes
+
+### QUICK
+
+Fast automatic design and generation with the fewest interactions.
+
+### AI_DECIDE
+
+Full design reasoning with AI selecting the visual direction automatically. This is the default mode.
+
+### USER_DECIDE
+
+Human-led design through Codex native selection UI. The user chooses or customizes the high-impact directions; the same workflow continues automatically after each choice.
+
+All three modes preserve the contemporary commercial gacha anime style contract, explicit constraints, front-facing standee readability, and post-generation quality audit.
 
 ## Visual Evolution
 
@@ -208,27 +226,54 @@ Download the repository ZIP, extract it, and place the extracted `anime-characte
 
 ## Quick start
 
+### QUICK example
+
 ```text
-$anime-character-director
-
-Design an original adult female anime gacha character.
-
-I want:
-- urban fantasy
-- dangerous but elegant
-- strong player appeal
-
-Use `USER_DECIDE` mode.
-Do not choose the Character or Art direction for me.
+用 anime-character-director 的 QUICK 模式设计一个冷静的都市幻想少女角色，直接生成最终立绘。
 ```
 
-The Skill stops at the Character Direction and Art Direction gates, then presents one consolidated Visual Preference Sheet. Each user selection resumes the same persisted session automatically. Only a fully resolved direction proceeds through the local Runtime → PromptCompiler boundary.
+### AI_DECIDE example
+
+```text
+用 anime-character-director 的 AI_DECIDE 模式设计一个外向的机械背景少女角色，让 AI 完成所有设计决策。
+```
+
+### USER_DECIDE example
+
+```text
+用 anime-character-director 的 USER_DECIDE 模式设计一个兽人女性角色，我想逐步选择角色设计方向。
+```
+
+USER_DECIDE 会自动出现 Codex 原生选择 UI；用户选择后，Skill 继续同一个持久化工作流。只有完整设计通过本地 Runtime 与 PromptCompiler 验证后，才进入 `$imagegen` 和质量审计。
 
 ## Runtime and boundaries
 
 This package is the reusable Codex Skill layer. It bundles the human-readable Anime Style Constitution, machine-readable style policy, Visual Preference runtime gate, preference schema, report format, and focused tests. It does not bundle an external Agent, server, LLM API wrapper, image API, or ComfyUI pipeline. A host project may add a larger Runtime preflight around the bundled ownership gate.
 
-The current runtime preserves the S1 Anime 2D, Regional Style, Lower-Body, Leg Separation, Pose Intent, and Playable Character Design contracts. Interaction System v1 ends at `GENERATION_READY`; it does not call `$imagegen` or generate images. After a later generation, present the image and stop for Human Review; do not automatically redesign, regenerate, optimize, or score commercial appeal.
+The local runtime preserves the S1 Anime 2D, Regional Style, Lower-Body, Leg Separation, Pose Intent, and Playable Character Design contracts. Its handoff boundary is `GENERATION_READY`; the Codex Skill orchestration then invokes built-in `$imagegen`, runs the existing Style and Anatomy quality audit, and reports technical uncertainty without silently redesigning the character.
+
+## Architecture
+
+```text
+Codex Skill
+    ↓
+Mode Router
+    ├── QUICK
+    ├── AI_DECIDE
+    └── USER_DECIDE
+           ↓
+      Codex Native Interaction UI
+    ↓
+Character Design Runtime
+    ↓
+Constraint System → PromptCompiler
+    ↓
+Codex built-in $imagegen
+    ↓
+Style + Anatomy + Constraint Fidelity Audit
+```
+
+This is a Codex Skill, not an independent Agent, server, or external image API.
 
 ## Change Reporting Contract
 
@@ -240,9 +285,15 @@ Anime Character Director is designed to work with Codex built-in `$imagegen`. It
 
 ## Current Status
 
-Pose System v1 is `ACCEPTED / FROZEN` for the current fast-generation production baseline. See [Pose System v1 Acceptance](docs/POSE_SYSTEM_V1_ACCEPTANCE.md). This is an accepted baseline, not a claim that every future pose problem is completely solved; detailed pose refinement remains a separate future mode.
+`ANIME_CHARACTER_DIRECTOR_V1 = RELEASE_READY`; the shipped version is `v1.0.0`. Style Contract, Character Design Runtime, Pose System, Persistent Interactive Workflow, Codex Native Interaction UI, Dynamic Candidate Generation, Explicit Constraint System, Compound Negation Parsing, PromptCompiler, and Generation Boundary are accepted for this release.
 
-Interaction System + Three Creation Modes v1 is `THREE_MODE_INTERACTION_SYSTEM_V1_ACCEPTED` / `ACCEPTED / FROZEN`. `QUICK`, `AI_DECIDE`, and `USER_DECIDE` share one persisted pipeline; the natural-language layer is `INTERACTION_NL_V1_ACCEPTED`; all flows stop at `GENERATION_READY` without image generation. See [Three-Mode Interaction System v1 Acceptance](docs/THREE_MODE_INTERACTION_V1_ACCEPTANCE.md).
+Pose System v1 is `ACCEPTED / FROZEN` for the current fast-generation production baseline. See [Pose System v1 Acceptance](docs/POSE_SYSTEM_V1_ACCEPTANCE.md). This is an accepted baseline, not a claim that every future pose problem is completely solved; detailed pose refinement remains post-v1 work.
+
+Interaction System + Three Creation Modes v1 is `THREE_MODE_INTERACTION_SYSTEM_V1_ACCEPTED` / `ACCEPTED / FROZEN`. `QUICK`, `AI_DECIDE`, and `USER_DECIDE` share one persisted pipeline; the natural-language layer is `INTERACTION_NL_V1_ACCEPTED`; the runtime handoff stops at `GENERATION_READY` before Skill-level `$imagegen` execution. See [Three-Mode Interaction System v1 Acceptance](docs/THREE_MODE_INTERACTION_V1_ACCEPTANCE.md).
+
+Generation Quality Benchmark v2 is `COMPLETE_WITH_REPLAYED_USER_DECIDE_DISCLOSURE`. Its results are internal release evidence, not required user knowledge. The four USER_DECIDE comparison rows use replayed previously recorded real-human selections under the frozen runtime; they are not four new live UI sessions. See [Benchmark v2 Summary](docs/BENCHMARK_V2_SUMMARY.md).
+
+LoRA status is `LORA_NOT_PRIMARY_BOTTLENECK`. Step1000, diversity research, mode-collapse research, and broader benchmark expansion are post-v1 roadmap items, not release blockers.
 
 Implemented: Standee-first product scope; Anime 2D Hard Gate guidance; three-mode Interaction System; Human-guided Character and Art Direction expansion; Human selection and mixing; Design Ownership Policy; Visual Preference Gate; Visual Preference Sheet and report; Visual Diversity Control; Human Audit Policy; Front-Facing Character Standee guidance; Contemporary Gacha Design Principle; Identity Pass; Character Canon; Same-Character Standee; controlled Variants including four-direction `standee_pose_variant` planning; Anatomy Integrity; Human Authority; Optional Presentation Extensions; Macro-first design; Detail Islands; Color Architecture; Material Hierarchy; Structural Fantasy Design; One Primary Iconic Anchor; plain-Chinese Change Reporting Contract; and Codex built-in `$imagegen` integration.
 

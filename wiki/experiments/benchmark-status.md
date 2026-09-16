@@ -12,6 +12,10 @@ related: ["[[constraints/anime-style-and-identity]]", "[[constraints/anatomy-pos
 
 The repository contains local phase reports and tests for identity, anatomy, operating modes, variants, and Visual Preference behavior. Metrics are valid only in the scope of the named artifact, runtime version, inputs, and evaluation protocol.
 
+## Generation Quality Benchmark v2 gate status — 2026-09-16
+
+Generation Quality Benchmark v2 is `COMPLETE_WITH_REPLAYED_USER_DECIDE_DISCLOSURE`. The frozen post-fix comparison contains 12 comparable primaries across A/B/C/D × QUICK/AI_DECIDE/USER_DECIDE, with 0/12 crossed-leg, black-stockings, or high-heels findings and no single mode dominating every dimension. The four USER_DECIDE comparison rows replay previously recorded real-human selections under the frozen runtime; they are not four new live native-UI sessions. The formal summary is [docs/BENCHMARK_V2_SUMMARY.md](../../docs/BENCHMARK_V2_SUMMARY.md), with detailed artifacts under `D:/benchmark/outputs/three_mode_generation_quality_v2_20260915/`.
+
 Older chat claims or unreferenced numbers are not promoted to project facts. A benchmark summary must identify its source artifact and distinguish deterministic runtime checks from subjective image review.
 
 The Visual Aesthetic Diversity v1 historical report recorded `Anime 2D Style Gate = 8/8 PASS`. The 2026-09-14 reassessment added a separate Gacha Rendering Style Gate without changing the old images or report: G is `STRONG_PASS`; B and D are acceptable with borderline notes; A, C, E, F, and H fail with editorial, character-sheet, graphic-poster, concept-art, and minimalist-fashion drift respectively. The current fixture result is provisional because its actual-image observations are human evidence; broader commercial-game corpus validation remains future work.

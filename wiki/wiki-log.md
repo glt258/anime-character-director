@@ -187,3 +187,18 @@
 - reran the exact 43-scenario UX suite after the fix: 43 PASS, 0 FAIL, including the defined core scenarios
 - focused parser/runtime regression passed 47 tests; no image generation or `$imagegen` call was made
 - disposition was `THREE_MODE_INTERACTION_UX_RETEST_PASS_PENDING_HUMAN_REVIEW`; the later Human Review acceptance is recorded below
+
+## [2026-09-15] acceptance | Persistent Interactive Workflow v1 Human Acceptance
+- executed HA-01 through HA-15 plus 11 required exception scenarios through the real Persistent Workflow Runner; all passed
+- verified two-process restart continuation, single-run continuity, direct natural-language Custom, BACK recovery, duplicate-submission safety, localized continuation, explicit constraint retention, and `GENERATION_READY` generation boundary
+- observed zero image-generation calls; retained the aborted benchmark evidence and did not start a new Generation Quality Benchmark
+- updated the implementation status to `PERSISTENT_INTERACTIVE_WORKFLOW_V1_ACCEPTED`; `GENERATION_QUALITY_BENCHMARK_UNBLOCKED` is recorded only as the next explicitly authorized stage
+
+## [2026-09-16] fix | NEGATION_CONSTRAINT_PARSER_FIX_V1
+- fixed compound negation parsing for `不要粉色长发`; prohibited values are preserved as `pink hair` and `long hair` without positive hair fields
+- verified extraction, final-design propagation, compiled-prompt propagation, targeted tests, and static compilation; no image generation or benchmark restart
+
+## [2026-09-16] fix | NEGATION_SCOPE_AND_RECOMMENDATION_REGRESSION_FIX_V1
+- preserved compound negation scope with structured `prohibited_constraints` units for combinations, concepts, and archetype boundaries
+- added NEG-SCOPE-01..08 and REC-01..06 coverage, candidate compatibility checks, PromptCompiler scope propagation, and unresolved-only recommendation aliases
+- retained Character A/B/C/D USER_DECIDE primary benchmark evidence; QUICK / AI_DECIDE remains paused and imagegen_calls is 0

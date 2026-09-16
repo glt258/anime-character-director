@@ -7,6 +7,10 @@ description: Direct original commercial 2D anime-game character creation through
 
 This skill is an Anime Character Art Director.
 
+Release status: `v1.0.0` — `ANIME_CHARACTER_DIRECTOR_V1_0_0 = RELEASED`.
+
+The public product exposes exactly three top-level creation modes: `QUICK`, `AI_DECIDE`, and `USER_DECIDE`. The default mode is `AI_DECIDE`. Benchmark, Gate, Persistent Runner, and Candidate Generator are internal implementation terms, not user-facing modes.
+
 It does NOT simply expand prompts.
 
 Its job is to transform a user's character idea into a coherent commercial 2D anime-game character design, validate that design, and only then request image generation.
@@ -258,21 +262,38 @@ Route explicit mode first, then the small natural-language vocabulary in [creati
 
 Only the `GateResolver` changes by mode. `QuickGateResolver` uses low-depth automatic fill and never waits; `AIDecideGateResolver` performs full deterministic exploration and records `delegated_ai`; `UserDecideGateResolver` stops only at the three high-impact gates. The pipeline does not branch on mode.
 
-`USER_DECIDE` replies are parsed by `runtime/natural_language_interaction.py` into the same `InteractionEvent` resume seam. Natural replies such as `B`, ordinal choices, `A 和 C 混一下`, `发色选 C`, `你来决定`, `其他推荐`, `为什么推荐 B？`, `重新给几个`, `取消`, and natural mode switches are supported; internal action names remain valid for deterministic integrations. The runtime validates the current `gate_id`, applies `SELECT`, `MIX`, `CUSTOM`, `DELEGATE`, `PARTIAL_DELEGATE`, `USE_RECOMMENDED`, `USE_ALL_RECOMMENDED`, `REGENERATE_OPTIONS`, `CONSTRAINT_UPDATE`, `CONTINUE`, or `BACK`, atomically saves the session, and continues until the next unresolved gate. `recommended` is never treated as selection until the user accepts it or delegates.
+`USER_DECIDE` 的正常生产路径由 Codex 原生 `request_user_input` 驱动。`runtime/codex_interaction_adapter.py` 只把当前持久化的 `InteractionCheckpoint` 转成 host-facing `NativeInteractionSpec`，不导入或调用 Codex host tool；Codex Skill/model orchestration 负责发起 UI。每个主要方向 Gate 默认展示 3 个动态候选，推荐项排第一并只做 UI 标注，`Other` 由 Codex client 原生提供。原生返回的 display label 由 adapter 在 `current checkpoint + candidate revision` 范围内严格映射回 stable `candidate_id`，重复 label、非法 answer、缺失 answer、stale revision 或不属于当前 checkpoint 的 answer 一律 fail closed。
+
+Native USER_DECIDE loop is:
+
+```text
+run = start_workflow(input)
+while run.status == WAITING_FOR_INTERACTION:
+    checkpoint = current_checkpoint(run)
+    spec = build_native_interaction_spec(checkpoint)
+    answer = request_user_input(**spec.to_request_user_input())
+    if answer is missing:
+        stop and keep WAITING_FOR_INTERACTION
+    run = continue_native_workflow(run.run_id, answer, checkpoint_id=spec.checkpoint_id)
+```
+
+`continue_native_workflow` resolves and atomically persists the current answer, then advances the same `WorkflowRun` to the next checkpoint or `GENERATION_READY`; it never asks for a confirmation or a second `continue` message. Visual Preference uses one native question per visible field, with 2–3 current options plus the client-provided `Other`. Custom text maps to `__CUSTOM__` and the existing Custom path. BACK, Regenerate, mode switching, and other free-form controls remain on `runtime/natural_language_interaction.py` as fallback/secondary controls, not the native happy path.
 
 Question-only and ambiguous replies never advance or lock a gate. Explicit positive or negative constraints are extracted before AI exploration; later-field requirements are held in `pending_constraint_updates`, applied with `explicit_user` provenance at the Visual Preference Sheet, and are not re-asked. `human_accept_recommended` remains distinct from `delegated_ai` in audit and final design data.
 
-The runtime records `CreativeInteractionSession`, `InteractionEvent`, `GateResolution`, `ModeSwitchEvent`, provenance, concise rationale, dependency-aware invalidation, stale-gate rejection, and event-id idempotency under `sessions/<session_id>/`. Legacy `creative_session.json` artifacts load with the `AI_DECIDE` default and are not rewritten.
+The runtime records `CreativeInteractionSession`, `InteractionEvent`, `GateResolution`, `ModeSwitchEvent`, provenance, concise rationale, dependency-aware invalidation, stale-gate rejection, and event-id idempotency under `sessions/<session_id>/`. The Persistent Runner additionally records one `WorkflowRun` in `workflow_run.json` and checkpoint transitions in `checkpoints.jsonl`; resolved or old checkpoints cannot be resolved again. Legacy `creative_session.json` artifacts load with the `AI_DECIDE` default and are not rewritten.
+
+The runner chooses a stable `interaction_locale` at workflow creation. Chinese and English gate titles, descriptions, recommendation labels, custom prompts, and action hints are localized by `InteractionLocalizer`; internal option ids and enum values remain language-independent. Native UI receives only real candidate options; `Other` is client-owned and maps to the stable internal id `__CUSTOM__` with its free-form text. The compatibility text path may still expose Custom and letter aliases, but it is not the normal production interaction contract.
 
 Quick is speed-first and low-depth; AI Decide is quality-first and full-depth. Both preserve explicit user constraints and run the same Style, Regional, Lower-Body, Playable Character Design, Pose, and Prompt Audit rules. User Decide exposes one Visual Preference Sheet instead of dozens of field-by-field turns; implementation variables remain AI-owned.
 
-This phase stops at `GENERATION_READY`. It does not call `$imagegen`, generate images, or start post-generation QA. The anime constitution is immutable; `Pose System v1` remains `ACCEPTED / FROZEN` and is only consumed by the shared pipeline.
+The local runtime handoff stops at `GENERATION_READY`. After that boundary, Codex Skill orchestration may call built-in `$imagegen`, then runs the existing S1 style check and Anatomy Integrity Check before normal Human Review. It does not silently redesign or endlessly regenerate. Persistent Interactive Workflow v1 is `PERSISTENT_INTERACTIVE_WORKFLOW_V1_ACCEPTED` / `ACCEPTED / FROZEN`; the anime constitution is immutable; `Pose System v1` remains `ACCEPTED / FROZEN` and is only consumed by the shared pipeline.
 
 Existing post-generation variants remain optional design actions and are not a new mode or a hard gate. Human-approved Canon, anatomy, and pose contracts remain authoritative; an aesthetic recommendation is not a hard gate.
 
 ## Interaction runtime and generation boundary
 
-The implementation lives in `runtime/interaction_runtime.py` and reuses `runtime/visual_preference_runtime.py` plus `runtime/regional_style_runtime.py`. Final prompt compilation is allowed only after the selected mode's resolution strategy has produced a complete design. `GENERATION_READY` means the `PromptBundle` is valid and ready for a later image-generation phase; it is not a generated asset or Human approval.
+The implementation lives in `runtime/interaction_runtime.py` and reuses `runtime/visual_preference_runtime.py` plus `runtime/regional_style_runtime.py`. Final prompt compilation is allowed only after the selected mode's resolution strategy has produced a complete design. `GENERATION_READY` means the `PromptBundle` is valid and ready for the Skill's later `$imagegen` phase; it is not itself a generated asset or Human aesthetic approval.
 
 The Skill owns intent interpretation, possibility expansion, human selection/mix interpretation, Character Planning, Art Planning, Design Ownership guidance, Visual Preference reporting, Identity/Canon guidance, Anatomy QA guidance, optional review, and artifact naming. `runtime/visual_preference_runtime.py` owns the fail-closed Visual Preference Gate, selection sources, Human Audit Policy, pose-option prevalidation, report artifacts, and state transitions; `runtime/leg_separation_runtime.py` owns the hard contract, pose-family validation, PromptCompiler geometry vocabulary, actual-image gate, candidate promotion, migration, and bounded pose-only repair flow. A host Runtime may add hashes, lineage, artifact paths, revision limits, Anime Style Constitution checks, and post-generation Anatomy Integrity. `anime-character-imagegen` remains the later image execution seam; it is not used before the visual preferences are locked.
 
@@ -288,6 +309,7 @@ Text-only pose guidance for the current test character: a full-body adult woman 
 - [anatomy-integrity.md](references/anatomy-integrity.md) — mandatory post-generation anatomy inspection, repair policy, and report artifact.
 - [creative-modes.md](references/creative-modes.md) — three creation modes, routing, and shared interaction pipeline.
 - [../docs/INTERACTION_SYSTEM.md](docs/INTERACTION_SYSTEM.md) — session lifecycle, gates, actions, persistence, and provenance.
+- [../docs/PERSISTENT_INTERACTIVE_WORKFLOW.md](docs/PERSISTENT_INTERACTIVE_WORKFLOW.md) — WorkflowRun, checkpoints, continuation, restart, Custom, and locale integration.
 - [human-authority.md](references/human-authority.md) — Human Authority Contract, technical/aesthetic review, lineage, and decisions.
 - [design-ownership.md](references/design-ownership.md) — Design Ownership Policy, variable classes, Visual Preference Gate, diversity rules, and Human Audit Policy.
 - [../docs/VISUAL_PREFERENCE_REPORT.md](../docs/VISUAL_PREFERENCE_REPORT.md) — JSON/report artifact format.

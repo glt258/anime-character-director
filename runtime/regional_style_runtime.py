@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 from datetime import datetime, timezone
 
 try:
@@ -641,6 +641,7 @@ class PromptCompiler:
         pose_family: str | None = None,
         pose_intent: str | None = None,
         pose_intent_contract: Mapping[str, Any] | PoseIntentContract | None = None,
+        prohibited_constraints: Sequence[Mapping[str, Any]] | None = None,
     ) -> PromptBundle:
         source_value = regional_visual_language_source
         explicit = source_value == RegionalVisualLanguageSource.EXPLICIT_USER_OVERRIDE.value
@@ -732,6 +733,17 @@ class PromptCompiler:
                 *leg_negative,
             )
         )
+        if prohibited_constraints:
+            prompt_lines.extend(
+                (
+                    "",
+                    "## EXPLICIT PROHIBITED CONSTRAINTS",
+                    *(
+                        f"Avoid {item.get('text')}; preserve scope={item.get('scope', 'independent')} ({item.get('kind', 'concept')})."
+                        for item in prohibited_constraints
+                    ),
+                )
+            )
         if lower_body_constraints:
             prompt_lines.extend(("", "## Lower-Body Design", *lower_body_constraints))
         prompt_lines.extend(("", "## Negative Constraints", *negative, *leg_negative))

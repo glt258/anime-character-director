@@ -166,7 +166,7 @@ def test_recommendation_is_not_selection_and_invalid_action_does_not_pollute_ses
         runtime = InteractionRuntime(directory)
         first = runtime.create_session("给我几个方案", CreationMode.USER_DECIDE)
         before = runtime.load_session(first.session_id).to_dict()
-        assert first.recommended == "A"
+        assert first.recommended == "candidate_01"
         assert first.status == SessionStatus.AWAITING_CHARACTER_DIRECTION.value
         invalid = runtime.resume_session(first.session_id, InteractionEvent("invalid", first.session_id, first.gate["gate_id"], "SELECT", {"variable": "hair_color", "option_id": "B"}))
         after = runtime.load_session(first.session_id).to_dict()

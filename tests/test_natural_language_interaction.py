@@ -136,6 +136,31 @@ def test_explicit_constraint_extractor_keeps_positive_and_negative_constraints()
     assert constraints["negative_constraints"]["forbid_footwear_family"] == "heels"
 
 
+def test_negated_compound_hair_constraint_is_prohibited_and_propagates() -> None:
+    text = "快速做一个角色，不要粉色长发。"
+    constraints = ExplicitConstraintExtractor().extract(text)
+    assert constraints["prohibited"] == ["pink long hair"]
+    assert constraints["prohibited_constraints"][0]["scope"] == "same_entity"
+    assert constraints["negative_constraints"]["forbid_hair_combination"] == {
+        "hair_color": "pink",
+        "hair_style_family": "long hair",
+    }
+    assert "forbid_hair_color" not in constraints["negative_constraints"]
+    assert "forbid_hair_style_family" not in constraints["negative_constraints"]
+    assert "hair_color" not in constraints
+    assert "hair_style_family" not in constraints
+
+    with TemporaryDirectory() as directory:
+        runtime = InteractionRuntime(directory)
+        response = runtime.create_session(text, CreationMode.QUICK)
+        session = runtime.load_session(response.session_id)
+        propagated = session.final_design["explicit_user_constraints"]
+        assert propagated["prohibited"] == ["pink long hair"]
+        assert "avoid pink long hair" in session.compiled_prompt["prompt"].lower()
+        assert "no pink" not in session.compiled_prompt["prompt"].lower()
+        assert "no long hair" not in session.compiled_prompt["prompt"].lower()
+
+
 def event(runtime: InteractionRuntime, session_id: str, action: str, payload: dict | None = None, event_id: str | None = None) -> InteractionEvent:
     session = runtime.load_session(session_id)
     return InteractionEvent(event_id or action.lower(), session_id, session.current_gate or "", action, payload or {})
@@ -154,9 +179,10 @@ def test_runtime_natural_short_selection_and_mix() -> None:
         mixed = runtime.resume_session(first.session_id, "A的轮廓不错，但我更喜欢C的整体感觉，混一下。")
         session = runtime.load_session(first.session_id)
         assert selected.status == SessionStatus.AWAITING_ART_DIRECTION.value
-        assert session.selected_character_direction["id"] == "B"
+        assert session.selected_character_direction["id"] == session.character_explore_result[1]["id"]
         assert mixed.status == SessionStatus.AWAITING_VISUAL_PREFERENCES.value
-        assert session.selected_art_direction["id"] == "A+C"
+        expected_mix = "+".join(item["id"] for item in (session.art_explore_result[0], session.art_explore_result[2]))
+        assert session.selected_art_direction["id"] == expected_mix
         assert any(item.get("decision_source") == "human_mix" for item in session.interaction_history)
 
 
@@ -182,7 +208,7 @@ def test_runtime_question_followed_by_explicit_selection_uses_new_choice() -> No
         response = runtime.resume_session(first.session_id, "行，那我选C。")
         session = runtime.load_session(first.session_id)
         assert response.status == SessionStatus.AWAITING_ART_DIRECTION.value
-        assert session.selected_character_direction["id"] == "C"
+        assert session.selected_character_direction["id"] == session.character_explore_result[2]["id"]
 
 
 def test_runtime_natural_visual_overrides_accept_recommendation_and_finishes() -> None:

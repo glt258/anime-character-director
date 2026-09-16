@@ -28,6 +28,7 @@ try:
         VisualPreferenceSession,
     )
     from .natural_language_interaction import ExplicitConstraintExtractor, NaturalLanguageInteractionParser
+    from .interaction_candidates import CANDIDATE_GENERATOR_VERSION, CandidateGenerator, context_profile
 except ImportError:  # pragma: no cover - supports direct host imports
     from regional_style_runtime import DEFAULT_REGIONAL_VISUAL_LANGUAGE, PromptCompiler  # type: ignore
     from visual_preference_runtime import (  # type: ignore
@@ -37,6 +38,7 @@ except ImportError:  # pragma: no cover - supports direct host imports
         VisualPreferenceSession,
     )
     from natural_language_interaction import ExplicitConstraintExtractor, NaturalLanguageInteractionParser  # type: ignore
+    from interaction_candidates import CANDIDATE_GENERATOR_VERSION, CandidateGenerator, context_profile  # type: ignore
 
 
 INTERACTION_SESSION_VERSION = "1.0.0"
@@ -254,6 +256,8 @@ class CreativeInteractionSession:
     gate_payload: dict[str, Any] = field(default_factory=dict)
     gate_sequence: int = 0
     retry_counts: dict[str, int] = field(default_factory=dict)
+    candidate_revisions: dict[str, int] = field(default_factory=dict)
+    candidate_history: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     artifact_status: dict[str, str] = field(default_factory=dict)
     processed_event_responses: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_response: dict[str, Any] | None = None
@@ -343,7 +347,46 @@ def _option(option_id: str, value: Any, reason: str) -> dict[str, Any]:
     return {"id": option_id, "value": value, "reason": reason, "diversity_risk": "low"}
 
 
-def _visual_sheet(constraints: Mapping[str, Any]) -> dict[str, Any]:
+def _visual_sheet(constraints: Mapping[str, Any], *, original_input: str | None = None, prior_resolutions: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    raw_input = str(original_input or constraints.get("raw", ""))
+    profile = context_profile(raw_input, constraints)
+    context_values = {
+        "urban_watchful": {
+            "hair_style_family": "asymmetric long layers",
+            "outfit_direction": "structured urban-fantasy layering",
+            "dominant_palette": "deep teal with signal amber",
+            "major_accessories": "compact city-signal device",
+            "background_direction": "quiet city dusk with offset light",
+            "character_visual_style": "clean-line contemporary gacha anime",
+        },
+        "mechanical_kinetic": {
+            "hair_style_family": "short high-motion side layers",
+            "outfit_direction": "lightweight modular action wear",
+            "dominant_palette": "cobalt with warm copper accent",
+            "major_accessories": "movable connector panel",
+            "background_direction": "layered motion arcs with clean depth",
+            "character_visual_style": "clean-line kinetic gacha anime",
+        },
+        "nonhuman_predatory": {
+            "hair_style_family": "segmented swept-back mane",
+            "outfit_direction": "anatomy-led asymmetric armor cloth",
+            "dominant_palette": "deep umber with cold mineral blue",
+            "major_accessories": "single structural horn or bone anchor",
+            "background_direction": "cold pressure field with anatomical planes",
+            "character_visual_style": "clean-line contemporary gacha anime with nonhuman structure",
+            "nonhuman_trait_level": "integrated nonhuman anatomy",
+            "body_build": "predatory athletic build",
+        },
+        "gentle_distinctive": {
+            "hair_style_family": "short-to-medium directional layers",
+            "outfit_direction": "structured calm everyday layers",
+            "dominant_palette": "sage and ink with warm brass accent",
+            "major_accessories": "single tactile trust token",
+            "background_direction": "warm architectural light with clear breathing room",
+            "character_visual_style": "clean-line contemporary gacha anime",
+        },
+        "specific_adult": {},
+    }[profile]
     hair = constraints.get("hair_color", "ash-silver")
     values: dict[str, Any] = {
         "hair_color": hair,
@@ -370,6 +413,13 @@ def _visual_sheet(constraints: Mapping[str, Any]) -> dict[str, Any]:
         "pose_intent": "STABLE_OPEN",
         "pose_family": "OPEN_PARALLEL_STANCE",
     }
+    values.update(context_values)
+    if prior_resolutions:
+        selected = prior_resolutions[-1].get("direction", {})
+        if isinstance(selected, Mapping):
+            values["relationship_to_character_style"] = f"extends the selected {selected.get('short_label') or selected.get('design_thesis') or 'character direction'}"
+            values["visual_reason"] = "keeps the selected character direction coherent while preserving a distinct lower-body read"
+    values.update({name: constraints[name] for name in ("hair_color", "footwear_family", "legwear_family", "nonhuman_trait_level") if name in constraints})
     user_fields = tuple(IDENTITY_VARIABLES) + (
         "footwear_family",
         "legwear_family",
@@ -383,6 +433,45 @@ def _visual_sheet(constraints: Mapping[str, Any]) -> dict[str, Any]:
         "body_build",
         "nonhuman_trait_level",
     )
+    context_alternatives = {
+        "urban_watchful": {
+            "hair_color": ("smoke-lilac", "blue-black"),
+            "outfit_direction": ("offset city shell", "quiet utility layers"),
+            "dominant_palette": ("charcoal and signal amber", "blue-gray and muted red"),
+            "major_accessories": ("none", "single reflective ear piece"),
+            "background_direction": ("rain-glass city edge", "thin neon reflection"),
+        },
+        "mechanical_kinetic": {
+            "hair_color": ("copper-red", "electric blue"),
+            "outfit_direction": ("asymmetric sprint layers", "compact impact jacket"),
+            "dominant_palette": ("graphite and orange", "teal and brass"),
+            "major_accessories": ("none", "flexible signal band"),
+            "background_direction": ("clean trajectory field", "bright workshop geometry"),
+        },
+        "nonhuman_predatory": {
+            "hair_color": ("iron white", "dark indigo"),
+            "outfit_direction": ("segmented hide and cloth", "low-center plated wrap"),
+            "dominant_palette": ("black-brown and ice blue", "oxblood and mineral gray"),
+            "major_accessories": ("none", "bone ridge accent"),
+            "background_direction": ("cold fractured plane", "low fog pressure field"),
+        },
+        "gentle_distinctive": {
+            "hair_color": ("dark chestnut", "smoky green-black"),
+            "outfit_direction": ("calm structured knit", "asymmetric civic layers"),
+            "dominant_palette": ("sage and brass", "ink and ochre"),
+            "major_accessories": ("none", "small tactile token"),
+            "background_direction": ("quiet courtyard light", "warm window geometry"),
+        },
+        "specific_adult": {},
+    }.get(profile, {})
+    profile_reason = {
+        "urban_watchful": "都市观察性与隐藏危险感",
+        "mechanical_kinetic": "外向动势与非字面机械关系",
+        "nonhuman_predatory": "非人结构与压迫性",
+        "gentle_distinctive": "亲和力与个人边界",
+        "specific_adult": "当前角色输入的核心身份",
+    }[profile]
+    prior_reason = "，并延续前序已选方向" if prior_resolutions else ""
     variables: dict[str, Any] = {}
     for name, recommended in values.items():
         alternatives = {
@@ -405,12 +494,13 @@ def _visual_sheet(constraints: Mapping[str, Any]) -> dict[str, Any]:
             "foot_visibility": ("toes visible", "shoes fully visible"),
             "pose_intent": ("RELAXED_ASYMMETRIC", "ONE_FOOT_FORWARD"),
             "pose_family": ("NARROW_SEPARATED_STANCE", "FORWARD_STEP_NON_CROSSING"),
-        }.get(name, (recommended, f"alternative {name}"))
+        }.get(name, context_alternatives.get(name, (recommended, f"alternative {name}")))
         option_values = [recommended, *alternatives]
         variables[name] = {
             "variable": name,
             "recommended": recommended,
-            "recommendation_reason": "best balance of identity, readability, and rule compliance",
+            "recommendation_reason": f"基于{profile_reason}{prior_reason}，在身份、可读性与约束兼容之间取得平衡。",
+            "recommendation_reason_en": f"Context-aware proposal for {profile_reason}{' with the prior direction preserved' if prior_resolutions else ''}; balances identity, readability, and constraint compatibility.",
             "options": [_option(chr(65 + index), value, "distinct identity or presentation trade-off") for index, value in enumerate(option_values)],
             "allow_custom": name in user_fields,
             "allow_ai_delegate": True,
@@ -453,27 +543,26 @@ def _visual_sheet(constraints: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _directions(text: str, *, depth: str, kind: str) -> list[dict[str, Any]]:
+def _directions(
+    text: str,
+    *,
+    depth: str,
+    kind: str,
+    explicit_constraints: Mapping[str, Any] | None = None,
+    prior_resolutions: Sequence[Mapping[str, Any]] = (),
+    revision: int = 0,
+) -> list[dict[str, Any]]:
     count = 2 if depth == "low" else 4
-    seeds = (
-        ("A", "quiet precision", "clear graphic silhouette", "restrained contemporary structure"),
-        ("B", "controlled anomaly", "asymmetric anchor", "layered modular tailoring"),
-        ("C", "warm social contrast", "relationship-led motif", "soft utility with a sharp focal point"),
-        ("D", "wildcard presence", "unusual negative space", "fantasy intrusion kept structural"),
+    gate_id = GateType.ART_DIRECTION_GATE.value if kind == "art" else GateType.CHARACTER_DIRECTION_GATE.value
+    generated = CandidateGenerator().generate(
+        gate_id=gate_id,
+        original_input=text,
+        explicit_constraints=explicit_constraints,
+        prior_resolutions=prior_resolutions,
+        style_policy="CONTEMPORARY_COMMERCIAL_GACHA_ANIME",
+        revision=revision,
     )
-    result = []
-    for identifier, thesis, anchor, structure in seeds[:count]:
-        result.append({
-            "id": identifier,
-            "title": f"{kind.title()} Direction {identifier}",
-            "summary": f"{thesis} direction for {text.strip() or 'the character'}",
-            "design_thesis": thesis,
-            "primary_anchor": anchor,
-            "structure": structure,
-            "identity_source": "explicit_user" if identifier == "A" and text else "ai_exploration",
-            "score": {"A": 7, "B": 9, "C": 8, "D": 7}[identifier],
-        })
-    return result
+    return generated[:count]
 
 
 class GateResolver:
@@ -505,7 +594,7 @@ class QuickGateResolver(GateResolver):
         if gate == GateType.ART_DIRECTION_GATE:
             selected = session.art_explore_result[0]
             return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "quick_ai_fill", rationale="Quick mode selected a compliant low-depth art direction.")
-        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints)
+        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])
         for name, item in sheet["variables"].items():
             if item.get("user_selection") is None:
                 item["user_selection"] = session.explicit_user_constraints.get(name, item["recommended"])
@@ -526,7 +615,7 @@ class AIDecideGateResolver(GateResolver):
         if gate == GateType.ART_DIRECTION_GATE:
             selected = max(session.art_explore_result, key=lambda item: item.get("score", 0))
             return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "delegated_ai", delegated=True, rationale="Selected the strongest art direction after full structural comparison.")
-        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints)
+        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])
         for name, item in sheet["variables"].items():
             if item.get("user_selection") is None:
                 item["user_selection"] = session.explicit_user_constraints.get(name, item["recommended"])
@@ -558,6 +647,10 @@ def _candidate_resolution(session: CreativeInteractionSession, gate: str, event:
         identifier = str(payload.get("candidate_id", payload.get("selection", payload.get("id", ""))))
         if action != InteractionAction.SELECT and not identifier:
             identifier = str(session.gate_payload.get("recommended", ""))
+        if identifier not in by_id and len(identifier) == 1 and identifier.isalpha():
+            index = ord(identifier.upper()) - ord("A")
+            if 0 <= index < len(candidates):
+                identifier = str(candidates[index].get("id"))
         if identifier not in by_id:
             raise ValueError(f"unknown candidate: {identifier}")
         return GateResolution(session.current_gate or "", gate, ResolutionStatus.RESOLVED.value, {"direction": by_id[identifier]}, "human_select" if action == InteractionAction.SELECT.value else "human_accept_recommended", human_override=action == InteractionAction.SELECT.value, rationale=f"Human resolved the gate with direction {identifier}.")
@@ -565,6 +658,12 @@ def _candidate_resolution(session: CreativeInteractionSession, gate: str, event:
         identifiers = payload.get("selections", payload.get("candidate_ids", payload.get("mix", [])))
         if isinstance(identifiers, str):
             identifiers = [item.strip() for item in identifiers.split("+") if item.strip()]
+        identifiers = [
+            candidates[ord(str(item).upper()) - ord("A")]["id"]
+            if len(str(item)) == 1 and str(item).isalpha() and 0 <= ord(str(item).upper()) - ord("A") < len(candidates)
+            else item
+            for item in identifiers
+        ]
         if not isinstance(identifiers, list) or len(identifiers) < 2 or any(str(item) not in by_id for item in identifiers):
             raise ValueError("MIX requires two or more valid candidate ids")
         selected = {"id": "+".join(map(str, identifiers)), "mix": [by_id[str(item)] for item in identifiers], "summary": " + ".join(by_id[str(item)]["summary"] for item in identifiers)}
@@ -639,7 +738,7 @@ def _apply_visual_update(sheet: dict[str, Any], name: str, update: Any, default_
 
 def _apply_visual_event(session: CreativeInteractionSession, event: InteractionEvent) -> GateResolution:
     gate = GateType.VISUAL_PREFERENCE_GATE.value
-    sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints)
+    sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])
     action = event.action.upper()
     payload = event.payload
     if action in {InteractionAction.SELECT.value, InteractionAction.USE_RECOMMENDED.value, InteractionAction.CUSTOM.value, InteractionAction.MIX.value}:
@@ -929,7 +1028,16 @@ class InteractionRuntime:
         session.retry_counts[count_key] = count
         depth = "low" if session.creation_mode == CreationMode.QUICK.value else "full"
         kind = "character" if count_key == "character_explore" else "art"
-        generated = _directions(f"{session.original_user_input} [regeneration {count}]", depth=depth, kind=kind)
+        generated = _directions(
+            session.original_user_input,
+            depth=depth,
+            kind=kind,
+            explicit_constraints=session.explicit_user_constraints,
+            prior_resolutions=([{"direction": session.selected_character_direction}] if count_key == "art_explore" and session.selected_character_direction else ()),
+            revision=count,
+        )
+        session.candidate_history.setdefault(count_key, []).append({"revision": count - 1, "options": deepcopy(previous), "reason": event.payload.get("raw_text", "user requested another set")})
+        session.candidate_revisions[count_key] = count
         if count_key == "character_explore":
             session.character_explore_result = generated
             session.current_stage = PipelineStage.CHARACTER_DIRECTION_RESOLUTION.value
@@ -970,7 +1078,7 @@ class InteractionRuntime:
             "current_gate": session.current_gate,
             "gate_type": session.gate_payload.get("gate_type"),
             "options": session.gate_payload.get("options", []),
-            "visual_variables": (session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints)).get("variables", {}),
+            "visual_variables": (session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])).get("variables", {}),
             "recommended": session.gate_payload.get("recommended"),
             "mode": session.creation_mode,
             "unresolved_fields": list(session.unresolved_fields),
@@ -993,7 +1101,7 @@ class InteractionRuntime:
             action = intent.action
         if intent.intent_type == "CUSTOM_UPDATE" and intent.field_updates:
             payload["field_updates"] = deepcopy(intent.field_updates)
-        if action == InteractionAction.CUSTOM.value and "field_updates" not in payload:
+        if action == InteractionAction.CUSTOM.value and not payload.get("field_updates"):
             payload["text"] = text
         return InteractionEvent(uuid4().hex, session.session_id, session.current_gate or "", action, payload)
 
@@ -1011,7 +1119,8 @@ class InteractionRuntime:
                 continue
             if stage == PipelineStage.CHARACTER_EXPLORE.value:
                 depth = "low" if session.creation_mode == CreationMode.QUICK.value else "full"
-                session.character_explore_result = _directions(session.original_user_input, depth=depth, kind="character")
+                session.candidate_revisions["character_explore"] = 0
+                session.character_explore_result = _directions(session.original_user_input, depth=depth, kind="character", explicit_constraints=session.explicit_user_constraints)
                 session.current_stage = PipelineStage.CHARACTER_DIRECTION_RESOLUTION.value
                 self._open_gate(session, GateType.CHARACTER_DIRECTION_GATE, session.character_explore_result)
                 resolution = resolver.resolve(session, GateType.CHARACTER_DIRECTION_GATE, pending_event)
@@ -1032,7 +1141,14 @@ class InteractionRuntime:
                 continue
             if stage == PipelineStage.ART_EXPLORE.value:
                 depth = "low" if session.creation_mode == CreationMode.QUICK.value else "full"
-                session.art_explore_result = _directions(session.original_user_input, depth=depth, kind="art")
+                session.candidate_revisions["art_explore"] = 0
+                session.art_explore_result = _directions(
+                    session.original_user_input,
+                    depth=depth,
+                    kind="art",
+                    explicit_constraints=session.explicit_user_constraints,
+                    prior_resolutions=([{"direction": session.selected_character_direction}] if session.selected_character_direction else ()),
+                )
                 session.current_stage = PipelineStage.ART_DIRECTION_RESOLUTION.value
                 self._open_gate(session, GateType.ART_DIRECTION_GATE, session.art_explore_result)
                 resolution = resolver.resolve(session, GateType.ART_DIRECTION_GATE, pending_event)
@@ -1048,7 +1164,11 @@ class InteractionRuntime:
                 continue
             if stage == PipelineStage.VISUAL_PREFERENCE_RESOLUTION.value:
                 if session.visual_preference_sheet is None:
-                    session.visual_preference_sheet = _visual_sheet(session.explicit_user_constraints)
+                    session.visual_preference_sheet = _visual_sheet(
+                        session.explicit_user_constraints,
+                        original_input=session.original_user_input,
+                        prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}],
+                    )
                 self._apply_pending_constraints_to_sheet(session)
                 self._open_gate(session, GateType.VISUAL_PREFERENCE_GATE, _visual_gate_options(session.visual_preference_sheet))
                 resolution = resolver.resolve(session, GateType.VISUAL_PREFERENCE_GATE, pending_event)
@@ -1126,9 +1246,34 @@ class InteractionRuntime:
         session.gate_sequence += 1
         session.current_gate = f"{session.session_id}:{gate.value.lower()}:{session.gate_sequence}"
         recommended = options[0].get("id") if options and gate != GateType.VISUAL_PREFERENCE_GATE else None
+        recommendation_rationale: Any = {}
         if gate == GateType.VISUAL_PREFERENCE_GATE:
             recommended = {name: item.get("recommended") for name, item in (session.visual_preference_sheet or {}).get("variables", {}).items() if item.get("user_visible")}
-        session.gate_payload = {"gate_id": session.current_gate, "gate_type": gate.value, "options": deepcopy(options), "recommended": recommended}
+            recommendation_rationale = {
+                name: {
+                    "zh": item.get("recommendation_reason", "当前上下文下的推荐方案。"),
+                    "en": item.get("recommendation_reason_en", "Context-aware recommendation."),
+                }
+                for name, item in (session.visual_preference_sheet or {}).get("variables", {}).items()
+                if item.get("user_visible")
+            }
+        elif options:
+            selected = options[0]
+            recommendation_rationale = {
+                "zh": selected.get("rationale_zh", "当前输入下身份、轮廓和约束兼容性最好的方案。"),
+                "en": selected.get("rationale_en", "Best balance of identity, silhouette, and constraint compatibility for this input."),
+            }
+        session.gate_payload = {
+            "gate_id": session.current_gate,
+            "gate_type": gate.value,
+            "options": deepcopy(options),
+            "recommended": recommended,
+            "recommendation_rationale": deepcopy(recommendation_rationale),
+            "original_user_input": session.original_user_input,
+            "explicit_constraints": deepcopy(session.explicit_user_constraints),
+            "candidate_generator_version": CANDIDATE_GENERATOR_VERSION if gate != GateType.VISUAL_PREFERENCE_GATE else None,
+            "candidate_revision": session.candidate_revisions.get("character_explore" if gate == GateType.CHARACTER_DIRECTION_GATE else "art_explore", 0),
+        }
         session.unresolved_fields = _gate_unresolved(session)
         session.status = _waiting_status(session.current_gate) if session.creation_mode == CreationMode.USER_DECIDE.value else SessionStatus.RUNNING.value
 
@@ -1148,7 +1293,7 @@ class InteractionRuntime:
         return True
 
     def _reopen_visual_gate_for_user(self, session: CreativeInteractionSession) -> None:
-        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints)
+        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])
         for item in sheet.get("variables", {}).values():
             if item.get("selection_source") not in {"explicit_user"}:
                 item.update(user_selection=None, selection_source=None, locked=False)
@@ -1163,6 +1308,11 @@ class InteractionRuntime:
 
     def _rollback(self, session: CreativeInteractionSession, event: InteractionEvent) -> InteractiveResponse:
         target = str(event.payload.get("target", "")).upper()
+        target = {
+            "CHARACTER_DIRECTION_GATE": "CHARACTER",
+            "ART_DIRECTION_GATE": "ART",
+            "VISUAL_PREFERENCE_GATE": "VISUAL",
+        }.get(target, target)
         if not target and session.current_stage in {PipelineStage.ART_DIRECTION_RESOLUTION.value, PipelineStage.VISUAL_PREFERENCE_RESOLUTION.value}:
             target = "CHARACTER" if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else "ART"
         if target in {"CHARACTER", "CHARACTER_DIRECTION", ""}:
@@ -1185,7 +1335,7 @@ class InteractionRuntime:
             session.design_gate_result = None
             session.compiled_prompt = None
             session.current_stage = PipelineStage.VISUAL_PREFERENCE_RESOLUTION.value if target in {"VISUAL", "VISUAL_PREFERENCE"} else PipelineStage.ART_DIRECTION_RESOLUTION.value
-            self._open_gate(session, GateType.ART_DIRECTION_GATE if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else GateType.VISUAL_PREFERENCE_GATE, session.art_explore_result if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else _visual_gate_options(_visual_sheet(session.explicit_user_constraints)))
+            self._open_gate(session, GateType.ART_DIRECTION_GATE if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else GateType.VISUAL_PREFERENCE_GATE, session.art_explore_result if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else _visual_gate_options(_visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])))
         session.audit_log.append({"event": "rollback_event", "target": target, "invalidated_artifacts": invalidated, "preserved": ["original_user_input", "interaction_history", "previous_choices"]})
         session.artifact_status.update({name: "stale" for name in invalidated})
         return self._response(session, message="已回到上一个可恢复 Gate；旧设计保留在历史中。")
@@ -1197,7 +1347,7 @@ class InteractionRuntime:
         gate = deepcopy(session.gate_payload) if session.current_gate else None
         options = gate.get("options", []) if gate else []
         if session.current_gate and session.gate_payload.get("gate_type") == GateType.VISUAL_PREFERENCE_GATE.value:
-            options = _visual_gate_options(session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints))
+            options = _visual_gate_options(session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}]))
         current_status = status or session.status
         return InteractiveResponse(session.session_id, session.creation_mode, current_status, session.current_stage, message or _message(session), gate, options, gate.get("recommended") if gate else None, list(session.unresolved_fields), _allowed_actions(session), _progress(session), {"session": str(self._session_dir(session.session_id) / "session.json"), "events": str(self._session_dir(session.session_id) / "events.jsonl"), "artifacts": str(self._session_dir(session.session_id) / "artifacts")}, error_code)
 
@@ -1220,7 +1370,15 @@ def _gate_unresolved(session: CreativeInteractionSession) -> list[str]:
 
 def _visual_gate_options(sheet: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
-        {"variable": name, "options": deepcopy(item.get("options", [])), "recommended": item.get("recommended"), "locked": bool(item.get("locked"))}
+        {
+            "variable": name,
+            "options": deepcopy(item.get("options", [])),
+            "recommended": item.get("recommended"),
+            "recommendation_reason": item.get("recommendation_reason"),
+            "recommendation_reason_en": item.get("recommendation_reason_en"),
+            "locked": bool(item.get("locked")),
+            "resolved": item.get("user_selection") is not None,
+        }
         for name, item in sheet.get("variables", {}).items()
         if item.get("user_visible") and item.get("selection_source") != "explicit_user"
     ]
@@ -1271,7 +1429,7 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         "provenance": {name: (session.visual_preference_sheet or {}).get("variables", {}).get(name, {}).get("selection_source", "policy_default") for name in visual},
     }
     for key, value in session.explicit_user_constraints.items():
-        if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "positive_constraints", "negative_constraints", "constraint_provenance"}:
+        if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "positive_constraints", "negative_constraints", "prohibited", "prohibited_constraints", "constraint_provenance"}:
             design.setdefault("visual_preferences", {})[key] = value
             design["provenance"][key] = "explicit_user"
             if key in lower_body:
@@ -1293,10 +1451,22 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
     visual = final_design.get("visual_preferences") or {}
     explicit = final_design.get("explicit_user_constraints") or {}
     prompt_fields = {name: visual[name] for name in explicit.get("explicit_user_fields", []) if name in visual}
-    negative = explicit.get("negative_constraints") or {}
-    if prompt_fields or negative:
-        identity += f"; Explicit user constraints: {json.dumps({**prompt_fields, **negative}, ensure_ascii=False, sort_keys=True)}"
-    return {"character_visual_style": str(final_design.get("character_visual_style", "clean-line contemporary gacha anime")), "character_identity": identity, "regional_visual_language": final_design.get("regional_visual_language", DEFAULT_REGIONAL_VISUAL_LANGUAGE), "regional_visual_language_source": final_design.get("regional_visual_language_source", "default_style_policy"), "lower_body": final_design.get("lower_body"), "age_group": final_design.get("age_group", "adult"), "fanservice_level": visual.get("fanservice_level"), "pose_description": final_design.get("pose_description"), "pose_family": final_design.get("pose_family"), "pose_intent": final_design.get("pose_intent")}
+    structured = list(explicit.get("prohibited_constraints") or [])
+    prompt_structured = [item for item in structured if str(item.get("text")) != "crossed legs"]
+    negative = {
+        name: value
+        for name, value in (explicit.get("negative_constraints") or {}).items()
+        if name != "forbid_crossed_legs" and not (structured and name.startswith("forbid_hair_"))
+    }
+    prohibited = list(explicit.get("prohibited") or [])
+    if prompt_fields or negative or prohibited or structured:
+        explicit_prompt_constraints = {**prompt_fields, **negative}
+        if prompt_structured:
+            explicit_prompt_constraints["prohibited_constraints"] = prompt_structured
+        elif prohibited:
+            explicit_prompt_constraints["prohibited"] = prohibited
+        identity += f"; Explicit user constraints: {json.dumps(explicit_prompt_constraints, ensure_ascii=False, sort_keys=True)}"
+    return {"character_visual_style": str(final_design.get("character_visual_style", "clean-line contemporary gacha anime")), "character_identity": identity, "prohibited_constraints": structured, "regional_visual_language": final_design.get("regional_visual_language", DEFAULT_REGIONAL_VISUAL_LANGUAGE), "regional_visual_language_source": final_design.get("regional_visual_language_source", "default_style_policy"), "lower_body": final_design.get("lower_body"), "age_group": final_design.get("age_group", "adult"), "fanservice_level": visual.get("fanservice_level"), "pose_description": final_design.get("pose_description"), "pose_family": final_design.get("pose_family"), "pose_intent": final_design.get("pose_intent")}
 
 
 def resume_session(session_root: str | Path, session_id: str, interaction_event: InteractionEvent | Mapping[str, Any] | str) -> InteractiveResponse:

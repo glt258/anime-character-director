@@ -15,6 +15,7 @@ This Wiki is project memory, not a chat archive or daily log.
 - [[00-overview]]
 - [[architecture\skill-and-runtime]]
 - [[architecture\interaction-system]]
+- [[architecture\persistent-interactive-workflow]]
 - [[../docs\THREE_MODE_INTERACTION_V1_ACCEPTANCE]]
 - [[architecture\pose-intent-preservation]]
 - [[architecture\regional-visual-language]]

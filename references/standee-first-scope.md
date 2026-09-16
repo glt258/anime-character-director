@@ -60,12 +60,10 @@ The default is `standard_standee`. An explicit user request may select `combat_a
 
 ## Mode scope
 
-- **quick:** few-line idea → Standard Character Standee unless the user explicitly requests an extension;
-- **directed:** AI-designed character → Standard Character Standee by default; fantasy and relationships must first enter the character body, silhouette, or costume;
-- **explore:** multiple Character/Art Directions → Human selection or mix → a strong character standee by default; scene-dependent directions are labeled `SCENE-DEPENDENT DIRECTION`, not silently discarded;
-- **variants:** controlled standee dimensions such as hair, expression, pose, costume, legwear, footwear, color, silhouette, accessory, and fantasy structure;
-- **same-character:** Canon-preserving standee, portrait, half-body, expression, or front/side/back reference by default; “再画一张她” means a new Same-Character Standee unless the user specifies an extension;
-- **critique:** compare Original and revisions, usually for character or standee design; optional presentation assets are in scope only when explicitly requested.
+- **QUICK:** few-line idea → Standard Character Standee by default, with low-depth automatic resolution;
+- **AI_DECIDE:** full Character and Art Explore → AI-selected Standard Character Standee by default;
+- **USER_DECIDE:** full Character and Art Explore → Human selection/mix → one consolidated Visual Preference Sheet → Standard Character Standee by default;
+- **post-generation actions:** controlled variants, same-character assets, critique, and repair remain actions on an existing design, not top-level creation modes.
 
 ## Front-facing rule
 

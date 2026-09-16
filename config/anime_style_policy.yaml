@@ -181,3 +181,15 @@ pose_constraints:
       leg_crossing_risk: "LOW"
     FORBIDDEN_CROSSED_STANCE:
       leg_crossing_risk: "FORBIDDEN"
+
+creation_modes:
+  default: AI_DECIDE
+  quick:
+    interactive: false
+    exploration_depth: low
+  ai_decide:
+    interactive: false
+    exploration_depth: full
+  user_decide:
+    interactive: true
+    exploration_depth: full

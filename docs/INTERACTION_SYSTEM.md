@@ -2,7 +2,7 @@
 title: Interaction System v1
 description: Persistent three-mode orchestration for Anime Character Director.
 type: architecture
-status: ACCEPTED / FROZEN
+status: ACCEPTED / FROZEN (base); Persistent Runner ACCEPTED / FROZEN
 confidence: high
 created: 2026-09-15
 updated: 2026-09-15
@@ -12,6 +12,8 @@ related: ["[[architecture/skill-and-runtime]]", "[[decisions/human-authority]]",
 ---
 
 # Interaction System v1
+
+The resolver/session contract described here remains the accepted base layer. The product-level continuation wrapper is documented in [Persistent Interactive Workflow Runner v1](PERSISTENT_INTERACTIVE_WORKFLOW.md) and passed Human Acceptance v1.
 
 ## Scope
 
@@ -41,7 +43,7 @@ INPUT → CHARACTER_EXPLORE → CHARACTER_DIRECTION_RESOLUTION
 
 ## Session model
 
-`CreativeInteractionSession` stores the session id, mode, current stage/gate/status, original input, explicit constraints, delegated and locked fields, unresolved fields, Character Explore and selection, Character Plan, Art Explore and selection, Visual Preference Sheet and resolved values, Final Design, Playable Character Design result, compiled prompt, audit log, interaction history, timestamps, and `interaction_session_version`.
+`CreativeInteractionSession` stores the session id, mode, current stage/gate/status, original input, explicit constraints, delegated and locked fields, unresolved fields, Character Explore and selection, Character Plan, Art Explore and selection, Visual Preference Sheet and resolved values, Final Design, Playable Character Design result, compiled prompt, audit log, interaction history, timestamps, and `interaction_session_version`. `WorkflowRun` adds one logical task lifecycle around this session; each User Decide gate becomes an `InteractionCheckpoint` and does not terminate the run.
 
 The runtime writes `sessions/<session_id>/session.json`, appends `events.jsonl`, and reserves `artifacts/`. Session JSON is saved atomically after a gate resolution and before the next pipeline stage. A legacy `creative_session.json` can still be loaded in memory with `AI_DECIDE` as the default; the old file is never rewritten.
 
@@ -63,7 +65,7 @@ Question-only replies such as `为什么推荐 B？` return an explanation while
 
 Explicit requirements are extracted before exploration and stored as `explicit_user`. If a requirement targets a later visual field while Character or Art Direction is open, it is stored in `pending_constraint_updates`, applied when the Visual Preference Sheet opens, and removed from future questions. Positive and negative constraints both reach Final Design and PromptCompiler; recommendations and defaults cannot overwrite them.
 
-After a selection, `resume_session(session_id, event)` automatically runs Character Planning, Art Explore, or Final Design as appropriate, stopping only at the next unresolved User Decide gate. No new user task or “continue” message is required.
+After a selection, the Persistent Runner's `continue_workflow(run_id, user_message)` invokes the underlying `resume_session` seam and automatically runs Character Planning, Art Explore, or Final Design as appropriate, stopping only at the next unresolved checkpoint. No new user task or “continue” message is required.
 
 ## Rollback and invalidation
 
