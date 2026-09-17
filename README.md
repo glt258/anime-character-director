@@ -6,7 +6,7 @@
 
 > One Skill. Three creation modes. From a character idea to a finished commercial anime/gacha illustration with Codex `$imagegen`.
 
-**Current release: `v1.1.0` · `ANIME_CHARACTER_DIRECTOR = RELEASED`**
+**Current release: `v1.2.0` · `ANIME_CHARACTER_DIRECTOR = RELEASED`**
 
 Anime Character Director turns a character idea into a coherent, production-oriented 2D anime-game character design. After the selected mode resolves the design and the local Runtime validates it, the Skill hands the result to Codex built-in `$imagegen` and runs the existing technical quality audit.
 
@@ -21,6 +21,50 @@ The current release gallery uses four diverse primary results from Generation Qu
 | ![Non-human character](docs/assets/readme/hero_c_nonhuman.png) | ![Warm memory character](docs/assets/readme/hero_d_warm_memory.png) |
 
 These are benchmark artifacts selected for visual range, not a claim that one mode wins every category.
+
+## From Template Collapse to Structured Diversity｜同质化修复前后对比
+
+同一个请求分别通过 `AI_DECIDE`、`QUICK` 和 `USER_DECIDE` 时，旧链路虽然决策流程不同，仍会收敛到相似的长发、弯角、性感鞋履、手靠脸姿势和哥特空间。这暴露的是设计空间坍缩，而不只是渲染问题。
+
+**Shared request**
+
+```text
+画一个魅魔角色，要求有魅魔角，体现魅力，性感暴露但是不涉黄
+```
+
+### Before — Different modes, same visual attractor
+
+以下三张是同一 human acceptance 中真实生成的结果；它们用于记录修复前的跨模式模板收敛。
+
+| AI_DECIDE | QUICK | USER_DECIDE |
+|---|---|---|
+| <img src="docs/assets/readme/diversity-before/ai-decide.png" alt="Before AI_DECIDE succubus" width="220"> | <img src="docs/assets/readme/diversity-before/quick.png" alt="Before QUICK succubus" width="220"> | <img src="docs/assets/readme/diversity-before/user-decide.png" alt="Before USER_DECIDE succubus" width="220"> |
+
+### After — Structured visual divergence
+
+新的 `DesignDNA + PoseDNA + BackgroundDNA` 管线把高层角色身份与可执行的结构字段分开，使同一语义请求能够产生多个结构有效的视觉方案。
+
+| P1 | P2 | P3 strict E2E | Repaired P4 |
+|---|---|---|---|
+| <img src="docs/assets/readme/diversity-after/p1.png" alt="P1 diverse succubus" width="220"> | <img src="docs/assets/readme/diversity-after/p2.png" alt="P2 diverse succubus" width="220"> | <img src="docs/assets/readme/diversity-after/p3-strict-e2e.png" alt="P3 strict E2E diverse succubus" width="220"> | <img src="docs/assets/readme/diversity-after/p4-repaired.png" alt="Repaired P4 diverse succubus" width="220"> |
+| Short side-sweep hair · tall flat boots · plum/copper · open stance | High ponytail · barefoot ankle jewelry · oxblood/ivory · forward step | Braided medium side mass · combat boots · deep teal/crimson · relaxed low hands · minimal stage | Layered bob · tailored trousers · platform footwear · violet/graphite · repaired architecture |
+
+这组结果体现了不同的发型、角型、服装与下装结构、鞋履类别、上半身动作、姿势、翅膀语汇和背景空间。系统目标是减少结构重复、检测跨 run 设计碰撞、保留明确视觉约束，并支持对失败字段进行定向修复；它不保证每次生成都完全不同或完全符合。
+
+这不是单纯追加 negative prompt 的修补。当前链路将角色设计、跨 run 判重、视觉规格约束、生成后质检和定向修复分离处理：
+
+```text
+Fresh Run
+→ Context Firewall
+→ Structured DesignDNA
+→ CrossRunNoveltyGuard
+→ Visual Specification Contract
+→ Image Generation
+→ Visual Adherence Critic
+→ Targeted Repair
+```
+
+图片均为既有真实验收产物；`P3 strict E2E` 使用完整 `PromptBundle.prompt`，`Repaired P4` 为 repair 后的最终 artifact。
 
 ## What is anime-character-director?
 
