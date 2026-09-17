@@ -22,9 +22,9 @@ The current release gallery uses four diverse primary results from Generation Qu
 
 These are benchmark artifacts selected for visual range, not a claim that one mode wins every category.
 
-## From Template Collapse to Structured Diversity｜同质化修复前后对比
+## From Template Collapse to Structured Diversity: Before/After Showcase
 
-同一个请求分别通过 `AI_DECIDE`、`QUICK` 和 `USER_DECIDE` 时，旧链路虽然决策流程不同，仍会收敛到相似的长发、弯角、性感鞋履、手靠脸姿势和哥特空间。这暴露的是设计空间坍缩，而不只是渲染问题。
+When the same request went through `AI_DECIDE`, `QUICK`, and `USER_DECIDE`, the old pipeline still converged on similar long hair, curved horns, sexy footwear, hand-near-face poses, and gothic spaces despite the different decision flows. This exposed design-space collapse rather than a rendering-only problem.
 
 **Shared request**
 
@@ -34,7 +34,7 @@ These are benchmark artifacts selected for visual range, not a claim that one mo
 
 ### Before — Different modes, same visual attractor
 
-以下三张是同一 human acceptance 中真实生成的结果；它们用于记录修复前的跨模式模板收敛。
+These three images are real outputs from the same human acceptance test; they document cross-mode template convergence before the fix.
 
 | AI_DECIDE | QUICK | USER_DECIDE |
 |---|---|---|
@@ -42,16 +42,16 @@ These are benchmark artifacts selected for visual range, not a claim that one mo
 
 ### After — Structured visual divergence
 
-新的 `DesignDNA + PoseDNA + BackgroundDNA` 管线把高层角色身份与可执行的结构字段分开，使同一语义请求能够产生多个结构有效的视觉方案。
+The new `DesignDNA + PoseDNA + BackgroundDNA` pipeline separates high-level character identity from executable structural fields, allowing one semantic request to produce multiple structurally valid visual solutions.
 
 | P1 | P2 | P3 strict E2E | Repaired P4 |
 |---|---|---|---|
 | <img src="docs/assets/readme/diversity-after/p1.png" alt="P1 diverse succubus" width="220"> | <img src="docs/assets/readme/diversity-after/p2.png" alt="P2 diverse succubus" width="220"> | <img src="docs/assets/readme/diversity-after/p3-strict-e2e.png" alt="P3 strict E2E diverse succubus" width="220"> | <img src="docs/assets/readme/diversity-after/p4-repaired.png" alt="Repaired P4 diverse succubus" width="220"> |
 | Short side-sweep hair · tall flat boots · plum/copper · open stance | High ponytail · barefoot ankle jewelry · oxblood/ivory · forward step | Braided medium side mass · combat boots · deep teal/crimson · relaxed low hands · minimal stage | Layered bob · tailored trousers · platform footwear · violet/graphite · repaired architecture |
 
-这组结果体现了不同的发型、角型、服装与下装结构、鞋履类别、上半身动作、姿势、翅膀语汇和背景空间。系统目标是减少结构重复、检测跨 run 设计碰撞、保留明确视觉约束，并支持对失败字段进行定向修复；它不保证每次生成都完全不同或完全符合。
+Together, these results show differences in hairstyle, horn topology, costume and lower-body structure, footwear category, upper-body action, pose, wing vocabulary, and background space. The system aims to reduce structural repetition, detect cross-run design collisions, preserve explicit visual constraints, and support targeted repair of failed fields; it does not guarantee that every generation will be completely different or fully compliant.
 
-这不是单纯追加 negative prompt 的修补。当前链路将角色设计、跨 run 判重、视觉规格约束、生成后质检和定向修复分离处理：
+This is not merely a negative-prompt patch. The current pipeline separates character design, cross-run novelty checking, visual specification constraints, post-generation QA, and targeted repair:
 
 ```text
 Fresh Run
@@ -64,7 +64,7 @@ Fresh Run
 → Targeted Repair
 ```
 
-图片均为既有真实验收产物；`P3 strict E2E` 使用完整 `PromptBundle.prompt`，`Repaired P4` 为 repair 后的最终 artifact。
+All images are existing real acceptance artifacts; `P3 strict E2E` used the complete `PromptBundle.prompt`, and `Repaired P4` is the final artifact after repair.
 
 ## What is anime-character-director?
 
