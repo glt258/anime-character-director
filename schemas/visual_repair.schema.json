@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "visual_repair.schema.json",
+  "title": "VisualRepairPlan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_image",
+    "source_prompt_hash",
+    "source_review_id",
+    "repair_attempt",
+    "attempt_id",
+    "repair_targets",
+    "locked_fields",
+    "preserve_fields",
+    "repair_instructions",
+    "anti_regression_constraints",
+    "max_attempts"
+  ],
+  "properties": {
+    "source_image": {"type": "string"},
+    "source_image_hash": {"type": ["string", "null"]},
+    "source_prompt_hash": {"type": ["string", "null"]},
+    "source_generation_id": {"type": ["string", "null"]},
+    "source_review_id": {"type": "string", "minLength": 1},
+    "repair_attempt": {"type": "integer", "minimum": 1},
+    "attempt_id": {"type": "string", "minLength": 1},
+    "repair_targets": {"type": "array", "items": {"type": "object"}},
+    "locked_fields": {"type": "object"},
+    "preserve_fields": {"type": "object"},
+    "repair_instructions": {"type": "array", "items": {"type": "object"}},
+    "anti_regression_constraints": {"type": "array", "items": {"type": "object"}},
+    "max_attempts": {"type": "integer", "minimum": 1}
+  }
+}

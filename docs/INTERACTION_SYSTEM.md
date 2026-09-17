@@ -43,9 +43,11 @@ INPUT → CHARACTER_EXPLORE → CHARACTER_DIRECTION_RESOLUTION
 
 ## Session model
 
-`CreativeInteractionSession` stores the session id, mode, current stage/gate/status, original input, explicit constraints, delegated and locked fields, unresolved fields, Character Explore and selection, Character Plan, Art Explore and selection, Visual Preference Sheet and resolved values, Final Design, Playable Character Design result, compiled prompt, audit log, interaction history, timestamps, and `interaction_session_version`. `WorkflowRun` adds one logical task lifecycle around this session; each User Decide gate becomes an `InteractionCheckpoint` and does not terminate the run.
+`CreativeInteractionSession` stores the session id, mode, current stage/gate/status, original input, explicit constraints, delegated and locked fields, Visual Context Firewall state, unresolved fields, Character Explore and selection, Character Plan, Art Explore and selection, Visual Preference Sheet and resolved values, Final Design, Playable Character Design result, compiled prompt, audit log, interaction history, timestamps, and `interaction_session_version`. `WorkflowRun` adds one logical task lifecycle around this session; each User Decide gate becomes an `InteractionCheckpoint` and does not terminate the run.
 
-The runtime writes `sessions/<session_id>/session.json`, appends `events.jsonl`, and reserves `artifacts/`. Session JSON is saved atomically after a gate resolution and before the next pipeline stage. A legacy `creative_session.json` can still be loaded in memory with `AI_DECIDE` as the default; the old file is never rewritten.
+The Visual Context Firewall defaults to `inherit_previous_visuals = false`. Prior-run visual artifacts stay available for replay/logging and future anti-repetition analysis, but are not generation context. Explicit inheritance requests are limited to the named visual fields.
+
+The runtime writes `sessions/<session_id>/session.json`, appends `events.jsonl`, and reserves `artifacts/`. Session JSON is saved atomically after a gate resolution and before the next pipeline stage. Post-generation repair attempts, exact prompts, reviews, outcomes, and `best_artifact` are also persisted under `artifacts/repair/`; replay reads them without invoking ImageGen. A legacy `creative_session.json` can still be loaded in memory with `AI_DECIDE` as the default; the old file is never rewritten.
 
 ## Events and gate results
 
@@ -80,6 +82,8 @@ The runtime distinguishes `explicit_user`, `quick_ai_fill`, `policy_default`, `d
 ## Failure policy
 
 Final Design failure never reaches PromptCompiler. Quick and AI Decide may perform one bounded automatic retry. User Decide receives the reason and returns to Art Direction so a human can choose again, request a new direction, or delegate. A second failure becomes `BLOCKED`; the runtime never loops indefinitely.
+
+After an image review, an explicitly authorized targeted repair consumes only the current run's critic targets and contract. Passing HARD fields are locked, the original prompt remains unchanged, and an external ImageGen regeneration must be re-reviewed before acceptance. Regression keeps the original best artifact; two repair attempts are the maximum.
 
 ## Demo boundary
 

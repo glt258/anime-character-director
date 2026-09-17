@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 import json
 from pathlib import Path
+import re
 from typing import Any, Mapping, Sequence
 from datetime import datetime, timezone
 
@@ -31,6 +32,13 @@ try:
         pose_intent_prompt_lines,
         resolve_pose_intent,
     )
+    from .interaction_candidates import (
+        BACKGROUND_SPECIFICATION_FIELDS,
+        POSE_SPECIFICATION_FIELDS,
+        background_specification_for_family,
+        pose_specification_for_family,
+    )
+    from .visual_context_firewall import VisualContextFirewall
 except ImportError:  # pragma: no cover - supports direct host imports
     from leg_separation_runtime import (  # type: ignore
         DEFAULT_LEG_SEPARATION_CONTRACT,
@@ -52,6 +60,13 @@ except ImportError:  # pragma: no cover - supports direct host imports
         pose_intent_prompt_lines,
         resolve_pose_intent,
     )
+    from interaction_candidates import (  # type: ignore
+        BACKGROUND_SPECIFICATION_FIELDS,
+        POSE_SPECIFICATION_FIELDS,
+        background_specification_for_family,
+        pose_specification_for_family,
+    )
+    from visual_context_firewall import VisualContextFirewall  # type: ignore
 
 
 class RegionalVisualLanguage(str, Enum):
@@ -299,6 +314,353 @@ DEFAULT_REGIONAL_STYLE_POLICY: dict[str, Any] = {
 
 class RegionalStyleError(ValueError):
     """Raised when regional style data is incomplete or contradictory."""
+
+
+class PromptConstraintConflict(RegionalStyleError):
+    """Raised when assembled positive prompt text contradicts a locked field."""
+
+    code = "PROMPT_CONSTRAINT_CONFLICT"
+
+    def __init__(self, conflicts: Sequence[str]) -> None:
+        self.conflicts = tuple(str(item) for item in conflicts)
+        super().__init__(f"{self.code}: {'; '.join(self.conflicts)}")
+
+
+HARD_VISUAL_FIELDS = (
+    "silhouette_family",
+    "hair_structure",
+    "horn_topology",
+    "upper_body_structure",
+    "lower_body_structure",
+    "costume_topology",
+    "exposure_strategy",
+    "legwear_strategy",
+    "footwear_category",
+    "pose_family",
+    "wing_strategy",
+    "tail_design",
+)
+STRONG_VISUAL_FIELDS = (
+    "palette_family",
+    "material_language",
+    "accessory_density",
+    "body_line_emphasis",
+    "background_family",
+    "character_visual_style",
+)
+_USER_HARD_FIELD_MAP = {
+    "hair_color": ("hair_color",),
+    "eye_color": ("eye_color",),
+    "hair_structure": ("hair_style_family",),
+    "costume_topology": ("outfit_direction",),
+    "exposure_strategy": ("exposure_strategy",),
+    "legwear_strategy": ("legwear_family",),
+    "footwear_category": ("footwear_family",),
+    "pose_family": ("pose_family",),
+    "palette_family": ("dominant_palette",),
+    "background_family": ("background_direction",),
+    "nonhuman_trait_level": ("nonhuman_trait_level",),
+    **{field_name: (field_name,) for field_name in (*POSE_SPECIFICATION_FIELDS, *BACKGROUND_SPECIFICATION_FIELDS)},
+}
+
+
+def _nonempty(value: Any) -> bool:
+    return value not in (None, "", (), [], {})
+
+
+def _first_value(values: Mapping[str, Any], names: Sequence[str]) -> Any:
+    for name in names:
+        if _nonempty(values.get(name)):
+            return values[name]
+    return None
+
+
+def _visual_anti_substitution(
+    hard: Mapping[str, Any],
+    pose_specification: Mapping[str, str] | None = None,
+    background_specification: Mapping[str, str] | None = None,
+) -> dict[str, tuple[str, ...]]:
+    result: dict[str, tuple[str, ...]] = {}
+    footwear = str(hard.get("footwear_category", "")).lower()
+    if "barefoot" in footwear or "bare feet" in footwear:
+        result["footwear_category"] = ("no shoes, boots, heels, pumps, or stilettos",)
+    elif "combat boot" in footwear:
+        result["footwear_category"] = ("do not substitute stilettos, pumps, or generic high heels",)
+
+    wings = str(hard.get("wing_strategy", "")).lower()
+    if any(token in wings for token in ("symbolic", "motif", "graphic")):
+        result["wing_strategy"] = ("no physical demon wings or large physical wings",)
+
+    hair = str(hard.get("hair_structure", "")).lower()
+    if "bob" in hair or any(token in hair for token in ("short", "jaw-length", "neck-length")):
+        result["hair_structure"] = ("do not extend into long flowing or waist-length hair",)
+
+    costume = str(hard.get("costume_topology", "")).lower()
+    if any(token in costume for token in ("trouser", "pants")):
+        result["costume_topology"] = ("no skirt, gown, lingerie dress, or high-slit evening dress",)
+
+    background = str(hard.get("background_family", "")).lower()
+    architecture_presence = str((background_specification or {}).get("architecture_presence", "")).lower()
+    if architecture_presence == "none" or any(token in background for token in ("abstract", "temporal", "haze", "gradient")):
+        result["background_specification"] = ("no castle, cathedral, palace, tower complex, or throne-room architecture",)
+
+    pose = {name: str(value).lower() for name, value in (pose_specification or {}).items()}
+    if "away from face" in " ".join(pose.values()):
+        result["pose_specification"] = ("do not move either hand to the face",)
+    if "open palm outward" in pose.get("right_hand_gesture", "") and any(
+        token in pose.get("right_arm_action", "") for token in ("extended", "reaching")
+    ):
+        result["right_hand_gesture"] = ("do not move this hand to the face",)
+    return result
+
+
+@dataclass(frozen=True)
+class VisualSpecificationContract:
+    """Structured visual lock between Final Design and PromptCompiler."""
+
+    hard_constraints: dict[str, Any] = field(default_factory=dict)
+    strong_preferences: dict[str, str] = field(default_factory=dict)
+    soft_intent: dict[str, str] = field(default_factory=dict)
+    anti_substitution: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    explicit_hard_fields: tuple[str, ...] = ()
+    priority_order: tuple[str, ...] = (
+        "current_run_explicit_user_selection",
+        "final_design_hard_specification",
+        "art_direction",
+        "character_direction",
+        "semantic_intent",
+    )
+    schema_version: str = "1.0.0"
+    pose_specification: dict[str, str] = field(default_factory=dict)
+    background_specification: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        data = deepcopy(asdict(self))
+        data["anti_substitution"] = {
+            name: list(values) for name, values in self.anti_substitution.items()
+        }
+        data["explicit_hard_fields"] = list(self.explicit_hard_fields)
+        data["priority_order"] = list(self.priority_order)
+        return data
+
+
+def build_visual_specification_contract(
+    *,
+    design_dna: Mapping[str, Any] | None = None,
+    visual_preferences: Mapping[str, Any] | None = None,
+    character_visual_style: str = "",
+    explicit_user_fields: Sequence[str] = (),
+    soft_intent: Mapping[str, Any] | None = None,
+) -> VisualSpecificationContract:
+    """Build a general contract without using archetype-specific defaults."""
+    dna = dict(design_dna or {})
+    visual = dict(visual_preferences or {})
+    explicit = set(str(name) for name in explicit_user_fields)
+    hard: dict[str, Any] = {}
+    explicit_hard: list[str] = []
+
+    for field_name in HARD_VISUAL_FIELDS:
+        value = dna.get(field_name)
+        for user_key in _USER_HARD_FIELD_MAP.get(field_name, ()):
+            if user_key in explicit and _nonempty(visual.get(user_key)):
+                value = visual[user_key]
+                explicit_hard.append(field_name)
+                break
+        if _nonempty(value):
+            hard[field_name] = str(value)
+
+    for field_name, user_keys in _USER_HARD_FIELD_MAP.items():
+        if field_name in hard or not any(user_key in explicit for user_key in user_keys):
+            continue
+        value = _first_value(visual, user_keys)
+        if _nonempty(value):
+            hard[field_name] = str(value)
+            explicit_hard.append(field_name)
+
+    pose_family = (
+        visual.get("pose_family", dna.get("pose_family", "OPEN_PARALLEL_STANCE"))
+        if "pose_family" in explicit
+        else dna.get("pose_family", "OPEN_PARALLEL_STANCE")
+    )
+    pose_source = dna.get("pose_specification") if "pose_family" not in explicit else None
+    pose_specification = dict(pose_source) if isinstance(pose_source, Mapping) else pose_specification_for_family(pose_family)
+    background_family = (
+        visual.get("background_direction", dna.get("background_family", ""))
+        if "background_direction" in explicit
+        else dna.get("background_family", "")
+    )
+    background_source = dna.get("background_specification") if "background_direction" not in explicit else None
+    background_specification = dict(background_source) if isinstance(background_source, Mapping) else background_specification_for_family(background_family)
+    for field_name in POSE_SPECIFICATION_FIELDS:
+        value = pose_specification.get(field_name)
+        if field_name in explicit and _nonempty(visual.get(field_name)):
+            value = visual[field_name]
+            explicit_hard.append(field_name)
+        if _nonempty(value):
+            pose_specification[field_name] = str(value)
+            hard[field_name] = str(value)
+    for field_name in BACKGROUND_SPECIFICATION_FIELDS:
+        value = background_specification.get(field_name)
+        if field_name in explicit and _nonempty(visual.get(field_name)):
+            value = visual[field_name]
+            explicit_hard.append(field_name)
+        if _nonempty(value):
+            background_specification[field_name] = str(value)
+            hard[field_name] = str(value)
+
+    strong: dict[str, str] = {}
+    for field_name in STRONG_VISUAL_FIELDS:
+        value = dna.get(field_name)
+        if field_name == "character_visual_style":
+            value = character_visual_style or value
+        if field_name == "palette_family" and "dominant_palette" in explicit:
+            value = visual.get("dominant_palette", value)
+        if field_name == "background_family" and "background_direction" in explicit:
+            value = visual.get("background_direction", value)
+        if _nonempty(value):
+            strong[field_name] = str(value)
+
+    mapped_user_fields = {name for names in _USER_HARD_FIELD_MAP.values() for name in names}
+    for name in explicit:
+        if name not in mapped_user_fields and _nonempty(visual.get(name)):
+            strong[name] = str(visual[name])
+
+    soft = {
+        str(name): str(value)
+        for name, value in dict(soft_intent or {}).items()
+        if _nonempty(value)
+    }
+    return VisualSpecificationContract(
+        hard_constraints=hard,
+        strong_preferences=strong,
+        soft_intent=soft,
+        anti_substitution=_visual_anti_substitution(hard, pose_specification, background_specification),
+        explicit_hard_fields=tuple(dict.fromkeys(explicit_hard)),
+        pose_specification=pose_specification,
+        background_specification=background_specification,
+    )
+
+
+def _normalize_visual_specification_contract(
+    value: Mapping[str, Any] | VisualSpecificationContract | None,
+) -> VisualSpecificationContract | None:
+    if value is None:
+        return None
+    if isinstance(value, VisualSpecificationContract):
+        return value
+    data = dict(value)
+    hard = {str(k): str(v) for k, v in dict(data.get("hard_constraints") or {}).items()}
+    pose_specification = {
+        name: str(item)
+        for name, item in dict(data.get("pose_specification") or {}).items()
+        if name in POSE_SPECIFICATION_FIELDS
+    }
+    background_specification = {
+        name: str(item)
+        for name, item in dict(data.get("background_specification") or {}).items()
+        if name in BACKGROUND_SPECIFICATION_FIELDS
+    }
+    if not pose_specification:
+        pose_specification = {name: hard[name] for name in POSE_SPECIFICATION_FIELDS if name in hard}
+    if not background_specification:
+        background_specification = {name: hard[name] for name in BACKGROUND_SPECIFICATION_FIELDS if name in hard}
+    return VisualSpecificationContract(
+        hard_constraints=hard,
+        strong_preferences={str(k): str(v) for k, v in dict(data.get("strong_preferences") or {}).items()},
+        soft_intent={str(k): str(v) for k, v in dict(data.get("soft_intent") or {}).items()},
+        anti_substitution={str(k): tuple(str(item) for item in values) for k, values in dict(data.get("anti_substitution") or {}).items()},
+        explicit_hard_fields=tuple(str(item) for item in data.get("explicit_hard_fields", ())),
+        priority_order=tuple(str(item) for item in data.get("priority_order", VisualSpecificationContract.priority_order)),
+        schema_version=str(data.get("schema_version", "1.0.0")),
+        pose_specification=pose_specification,
+        background_specification=background_specification,
+    )
+
+
+def _visual_field_label(name: str) -> str:
+    return name.replace("_", " ").title()
+
+
+def validate_visual_specification_contract(
+    contract: VisualSpecificationContract,
+    positive_prompt: str,
+) -> None:
+    """Reject positive prompt substitutions before the GENERATION_READY boundary."""
+    text = positive_prompt.lower()
+    hard = {name: value.lower() for name, value in contract.hard_constraints.items()}
+    conflicts: list[str] = []
+
+    def has(*patterns: str) -> bool:
+        return any(re.search(pattern, text) for pattern in patterns)
+
+    palette = hard.get("palette_family", "")
+    if palette:
+        palette_tokens = {
+            "red", "crimson", "scarlet", "orange", "copper", "yellow", "gold", "green", "teal",
+            "blue", "cobalt", "cyan", "violet", "purple", "pink", "magenta", "white", "ivory",
+            "black", "gray", "grey", "silver", "brown", "umber", "beige", "plum",
+        }
+        expected_colors = set(re.findall(r"[a-z]+", palette)) & palette_tokens
+        mentioned_colors = set(re.findall(r"[a-z]+", text)) & palette_tokens
+        if expected_colors and mentioned_colors - expected_colors:
+            conflicts.append(
+                f"palette_family={palette} conflicts with unexpected palette terms: {sorted(mentioned_colors - expected_colors)}"
+            )
+
+    footwear = hard.get("footwear_category", "")
+    if "barefoot" in footwear or "bare feet" in footwear:
+        if has(r"\b(heels?|boots?|pumps?|stilettos?|shoes?)\b"):
+            conflicts.append("footwear_category=barefoot conflicts with shoe/heel positive text")
+    elif "combat boot" in footwear and has(r"stiletto|pump shoes?|generic high heels?|\bhigh heels?\b"):
+        conflicts.append("footwear_category=combat boots conflicts with heel positive text")
+
+    hair = hard.get("hair_structure", "")
+    if ("bob" in hair or "short" in hair) and has(r"long flowing|waist[- ]length|very long hair"):
+        conflicts.append("hair_structure short/bob conflicts with long-hair positive text")
+
+    costume = hard.get("costume_topology", "")
+    if any(token in costume for token in ("trouser", "pants")) and has(r"\bgown\b|high[- ]slit|lingerie dress|evening dress|\bskirt\b"):
+        conflicts.append("costume_topology trousers/pants conflicts with dress/skirt positive text")
+
+    wings = hard.get("wing_strategy", "")
+    if any(token in wings for token in ("symbolic", "motif", "graphic")) and has(r"physical demon wings?|large physical wings?"):
+        conflicts.append("wing_strategy=symbolic motif conflicts with physical-wing positive text")
+
+    background = hard.get("background_family", "")
+    architecture_presence = contract.background_specification.get("architecture_presence", "").lower()
+    if architecture_presence == "none" and has(r"\bcastle\b|\bcathedral\b|\bpalace\b|tower(?:ing| complex)?|throne room"):
+        conflicts.append("architecture_presence=none conflicts with literal architecture positive text")
+    elif any(token in background for token in ("abstract", "temporal", "haze", "gradient")) and has(r"\bcastle\b|\bcathedral\b|throne room|\bpalace\b"):
+        conflicts.append("background_family=abstract/temporal conflicts with literal-location positive text")
+
+    legwear = hard.get("legwear_strategy", "")
+    if legwear in {"none", "bare legs", "bare-leg exposure"} and has(r"stockings?|tights?|pantyhose"):
+        conflicts.append("legwear_strategy=none/bare legs conflicts with legwear positive text")
+
+    pose = hard.get("pose_family", "")
+    if "low-energy" in pose and has(r"high[- ]energy|dynamic action pose"):
+        conflicts.append("pose_family=low-energy conflicts with high-energy positive text")
+    if "open" in pose and has(r"crossed legs?|legs crossed"):
+        conflicts.append("pose_family=open stance conflicts with crossed-leg positive text")
+
+    pose_spec = {name: value.lower() for name, value in contract.pose_specification.items()}
+    if "away from face" in " ".join(pose_spec.values()) and has(
+        r"touching (?:the )?cheek|finger(?:s)? near (?:the )?lips?|hand (?:beside|near) (?:the )?face"
+    ):
+        conflicts.append("pose hand-away specification conflicts with face-adjacent positive text")
+    if "open palm outward" in pose_spec.get("right_hand_gesture", "") and has(
+        r"right hand (?:touching|near|beside) (?:the )?(?:face|cheek)|right hand near lips"
+    ):
+        conflicts.append("right_hand_gesture=open palm outward conflicts with right-hand face gesture")
+
+    exposure = hard.get("exposure_strategy", "")
+    if any(token in exposure for token in ("exposure", "exposed", "bare")) and has(r"fully covered|no skin visible"):
+        conflicts.append("exposure_strategy requires exposure but positive text says fully covered")
+    if "fully covered" in exposure and has(r"bare skin|skin exposure|exposed skin"):
+        conflicts.append("exposure_strategy=fully covered conflicts with exposed-skin positive text")
+
+    if conflicts:
+        raise PromptConstraintConflict(conflicts)
 
 
 @dataclass(frozen=True)
@@ -614,6 +976,12 @@ class PromptBundle:
     leg_geometry_constraints: tuple[str, ...] = LEG_GEOMETRY_POSITIVE
     pose_intent: str = "STABLE_OPEN"
     pose_intent_contract: dict[str, Any] = field(default_factory=dict)
+    inherit_previous_visuals: bool = False
+    allowed_visual_inheritance: tuple[str, ...] = ()
+    blocked_context_sources: tuple[str, ...] = ()
+    visual_context_firewall_applied: bool = True
+    visual_specification_contract: dict[str, Any] = field(default_factory=dict)
+    prompt_adherence_manifest: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -642,7 +1010,14 @@ class PromptCompiler:
         pose_intent: str | None = None,
         pose_intent_contract: Mapping[str, Any] | PoseIntentContract | None = None,
         prohibited_constraints: Sequence[Mapping[str, Any]] | None = None,
+        explicit_negative_constraints: Mapping[str, Any] | None = None,
+        visual_context_firewall: Mapping[str, Any] | VisualContextFirewall | None = None,
+        visual_specification_contract: Mapping[str, Any] | VisualSpecificationContract | None = None,
+        positive_prompt_fragment: str | None = None,
     ) -> PromptBundle:
+        firewall = VisualContextFirewall.from_metadata(visual_context_firewall)
+        if not firewall.visual_context_firewall_applied:
+            raise RegionalStyleError("Visual Context Firewall must be applied before prompt compilation")
         source_value = regional_visual_language_source
         explicit = source_value == RegionalVisualLanguageSource.EXPLICIT_USER_OVERRIDE.value
         selection = resolve_regional_visual_language(
@@ -696,6 +1071,7 @@ class PromptCompiler:
             lower_body_variables = validate_lower_body_design(lower_body, age_group=age_group)
             review_lower_body_design(lower_body, age_group=age_group, fanservice_level=fanservice_level)
             lower_body_constraints = _lower_body_prompt_lines(lower_body_variables)
+        visual_contract = _normalize_visual_specification_contract(visual_specification_contract)
         prompt_lines = [
             "## GLOBAL RENDERING MEDIUM",
             "## Rendering Foundation",
@@ -711,7 +1087,79 @@ class PromptCompiler:
             safe_style,
         ]
         if character_identity:
-            prompt_lines.extend(("", "## Character Identity", character_identity))
+            prompt_lines.extend(("", "## CHARACTER IDENTITY", character_identity))
+        if visual_contract is not None:
+            if visual_contract.hard_constraints:
+                prompt_lines.extend(("", "## HARD DESIGN SPECIFICATION"))
+                prompt_lines.extend(
+                    f"{_visual_field_label(name)}: {value}"
+                    for name, value in visual_contract.hard_constraints.items()
+                    if name not in (*POSE_SPECIFICATION_FIELDS, *BACKGROUND_SPECIFICATION_FIELDS)
+                )
+            if visual_contract.strong_preferences:
+                prompt_lines.extend(("", "## STRONG VISUAL DIRECTION"))
+                prompt_lines.extend(
+                    f"{_visual_field_label(name)}: {value}"
+                    for name, value in visual_contract.strong_preferences.items()
+                )
+            if visual_contract.soft_intent:
+                prompt_lines.extend(("", "## SOFT CHARACTER INTENT"))
+                prompt_lines.extend(
+                    f"{_visual_field_label(name)}: {value}"
+                    for name, value in visual_contract.soft_intent.items()
+                )
+            if visual_contract.pose_specification:
+                pose_labels = {
+                    "lower_body_pose": "Lower Body",
+                    "weight_distribution": "Weight",
+                    "torso_orientation": "Torso",
+                    "shoulder_line": "Shoulder Line",
+                    "arm_configuration": "Arm Configuration",
+                    "left_arm_action": "Left Arm",
+                    "right_arm_action": "Right Arm",
+                    "left_hand_gesture": "Left Hand",
+                    "right_hand_gesture": "Right Hand",
+                    "head_attitude": "Head",
+                    "gaze_direction": "Gaze",
+                    "gesture_energy": "Gesture Energy",
+                }
+                prompt_lines.extend(
+                    (
+                        "",
+                        "## POSE SPECIFICATION",
+                    *(
+                        f"{pose_labels[name]}: {value}"
+                        for name, value in visual_contract.pose_specification.items()
+                        if name in pose_labels
+                    ),
+                    )
+                )
+            if visual_contract.background_specification:
+                background_labels = {
+                    "environment_type": "Environment",
+                    "architecture_presence": "Architecture Presence",
+                    "architecture_language": "Architecture Language",
+                    "spatial_structure": "Spatial Structure",
+                    "atmosphere": "Atmosphere",
+                    "lighting_context": "Lighting Context",
+                    "ground_plane": "Ground Plane",
+                    "depth_structure": "Depth Structure",
+                    "background_complexity": "Complexity",
+                    "dominant_shape_language": "Dominant Shape Language",
+                }
+                prompt_lines.extend(
+                    (
+                        "",
+                        "## BACKGROUND SPECIFICATION",
+                    *(
+                        f"{background_labels[name]}: {value}"
+                        for name, value in visual_contract.background_specification.items()
+                        if name in background_labels
+                    ),
+                    )
+                )
+            if positive_prompt_fragment:
+                prompt_lines.extend(("", "## ADDITIONAL POSITIVE VISUAL SPECIFICATION", positive_prompt_fragment))
         prompt_lines.extend(
             (
                 "",
@@ -746,8 +1194,31 @@ class PromptCompiler:
             )
         if lower_body_constraints:
             prompt_lines.extend(("", "## Lower-Body Design", *lower_body_constraints))
+        positive_prompt = "\n".join(
+            line
+            for line in prompt_lines
+            if not line.startswith("Avoid ")
+            and line not in leg_negative
+            and line != "## NEGATIVE LEG GEOMETRY — HARD INVARIANT"
+        )
+        if visual_contract is not None and visual_contract.anti_substitution:
+            prompt_lines.extend(("", "## NEGATIVE / DO-NOT-SUBSTITUTE"))
+            prompt_lines.extend(
+                f"{_visual_field_label(name)}: {', '.join(values)}"
+                for name, values in visual_contract.anti_substitution.items()
+            )
+        if explicit_negative_constraints:
+            prompt_lines.extend(
+                (
+                    "",
+                    "## EXPLICIT USER NEGATIVE CONSTRAINTS",
+                    *(f"{name}: {value}" for name, value in explicit_negative_constraints.items()),
+                )
+            )
         prompt_lines.extend(("", "## Negative Constraints", *negative, *leg_negative))
         compiled_prompt = "\n".join(prompt_lines)
+        if visual_contract is not None:
+            validate_visual_specification_contract(visual_contract, positive_prompt)
         if not audit_leg_prompt(compiled_prompt)["passed"]:
             raise RegionalStyleError("Prompt Audit failed: hard leg geometry is incomplete or conflicting")
         if not audit_pose_intent_prompt(compiled_prompt, intent_contract.requested_intent)["passed"]:
@@ -769,6 +1240,12 @@ class PromptCompiler:
             leg_positive,
             intent_contract.requested_intent,
             intent_contract.to_dict(),
+            firewall.inherit_previous_visuals,
+            firewall.allowed_visual_inheritance,
+            firewall.blocked_context_sources,
+            firewall.visual_context_firewall_applied,
+            visual_contract.to_dict() if visual_contract is not None else {},
+            visual_contract.to_dict() if visual_contract is not None else {},
         )
 
 

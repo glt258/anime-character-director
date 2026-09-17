@@ -14,6 +14,8 @@ The workflow is: Explore → Character Planning → Art Planning → Visual Pref
 
 The Skill owns orchestration, evidence boundaries, checkpoints, and user-facing decisions. The local runtime owns deterministic validation, source lineage, locks, mode handling, and reportable state. `$imagegen` supplies visual output; it does not replace the gates or human authority.
 
+Post-generation adherence is a separate reporting seam. `VisualAdherenceCritic` consumes an actual image plus the persisted `PromptAdherenceManifest` and labeled observations, then persists a stable field/anatomy report through `InteractionRuntime.record_visual_adherence_review`. It is detection-only: no prompt rewrite, DesignDNA mutation, regeneration, best-of-N, or similarity scoring.
+
 Generation is blocked when required planning, lock, identity, or review checkpoints are not satisfied.
 
 Global Rendering Style is a runtime-owned default: `CONTEMPORARY_COMMERCIAL_GACHA_ANIME`. Character Visual Style remains character-owned design language and cannot replace the rendering medium unless the user explicitly supplies a rendering override. S1 checks the anime 2D medium; Gacha checks commercial playable-character rendering and presentation; the two reports remain separate.

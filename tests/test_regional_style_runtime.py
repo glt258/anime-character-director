@@ -3,6 +3,7 @@
 from pathlib import Path
 import json
 import sys
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -15,6 +16,7 @@ from runtime.regional_style_runtime import (  # noqa: E402
     LEG_ACCESSORY_FAMILIES,
     LEGWEAR_FAMILIES,
     PromptCompiler,
+    RegionalStyleError,
     RegionalStyleCritic,
     StrongFemaleRegionalStyleReview,
     RegionalVisualLanguageSource,
@@ -142,6 +144,14 @@ def test_prompt_compiler_orders_three_layers_and_protects_regional_layer() -> No
     assert bundle.regional_visual_language == DEFAULT_REGIONAL_VISUAL_LANGUAGE
     assert bundle.prompt.index("## GLOBAL RENDERING MEDIUM") < bundle.prompt.index("## REGIONAL VISUAL LANGUAGE")
     assert bundle.prompt.index("## REGIONAL VISUAL LANGUAGE") < bundle.prompt.index("## CHARACTER VISUAL STYLE")
+
+
+def test_prompt_compiler_rejects_an_unapplied_visual_context_firewall() -> None:
+    with pytest.raises(RegionalStyleError, match="Visual Context Firewall"):
+        PromptCompiler().compile(
+            character_visual_style="clean-line contemporary gacha anime",
+            visual_context_firewall={"visual_context_firewall_applied": False},
+        )
 
 
 def test_regional_critic_requires_actual_image_and_labeled_observations() -> None:

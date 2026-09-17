@@ -29,6 +29,48 @@ Use the light `presentation_type` concept to distinguish an explicitly requested
 
 Every development task that changes this Skill or its benchmark artifacts must end with a concise, plain-Chinese Human-facing report containing: **这次在干什么**, **为什么要改**, **这次具体改了什么**, **这次没动什么**, **检查结果**, **现在项目到哪了**, and **下一步**. This is a reporting contract, not a new runtime gate; explain the effect before listing file names, translate technical English on first use, and keep AI recommendation separate from Human decision.
 
+## CODEX REASONING CONTEXT FIREWALL — HIGHEST-PRIORITY DESIGN RULE
+
+### Fresh Visual Run
+
+Every new character-generation request is a **fresh visual run** by default, even when it repeats an earlier request and even when earlier turns remain visible in the conversation. Historical character design is non-authoritative information, not positive design evidence.
+
+Before any character design reasoning begins, the Skill MUST conceptually execute `BUILD_CURRENT_RUN_CONTEXT`. `CurrentRunContext` contains only:
+
+- `current_user_request`
+- `explicit_current_run_selections`
+- `current_run_gate_resolutions`
+- global project policies and style contracts
+- `explicitly_authorized_inheritance`, empty unless the current request explicitly authorizes inheritance
+
+The Skill MUST NOT place the complete conversation history into `CurrentRunContext`. In a fresh visual run, Codex MUST NOT:
+
+- recover the previous character's visual design from conversation history;
+- infer that a visual choice made in a previous run is still preferred;
+- use previous hair, horns, outfit, footwear, pose, palette, background, image prompt, image description, or critic summary as a default;
+- treat a previously critic-approved design as a safe template to repeat; or
+- infer “keep the style consistent”, “continue the earlier taste”, or similar preferences without an explicit current request.
+
+Historical visual information may remain in replay, logs, and debugging records, and may be passed only to a future anti-repetition analysis path. The forbidden direction is `history → Codex reasoning → new visual choice`.
+
+Do not infer current visual preferences from previous runs. In `USER_DECIDE`, a field that the Human has not selected in the current run is not a historical preference and MUST NOT be silently filled from conversation history. Current-run selections and confirmed gate outputs remain valid; global style policy remains valid.
+
+The only exception is an explicit current user request to inherit, continue, reference, or modify a previous design. A field-specific request such as “沿用上一版的红发，其他重新设计” authorizes only `hair_color`; it does not authorize long hair, horns, dress, heels, pose, or background. A broad request such as “参考上一版整体设计做一个变体” may set `inherit_previous_visuals = true` for the explicitly requested variation. The runtime Visual Context Firewall remains the enforcement boundary for field filtering.
+
+#### Reasoning example
+
+Previous run: red long hair, large ram horns, burgundy dress, high-heel ankle boots, gothic cathedral, and a hand-near-face pose.
+
+New request: “使用 AI_DECIDE 模式画一个魅魔角色，要求有魅魔角，体现魅力，性感暴露但是不涉黄。”
+
+Wrong: “上一版效果不错，因此继续使用红色长发、礼服、高跟鞋，稍微调整角和配色。”
+
+Correct: treat it as a fresh visual run. The current positive design evidence is only succubus, horns, charm, adult sensual exposure, and the safety boundary; the other visual structure must be newly decided.
+
+`BUILD_CURRENT_RUN_CONTEXT` precedes `CHARACTER_EXPLORE` in every creation mode. Character direction, art direction, Visual Preference resolution, and image-prompt assembly may use that sanitized context plus later results from the same run, never the complete chat history.
+
+The existing runtime `VisualContextFirewall.generation_context(...)` is the serialized handoff for `CurrentRunContext`: `current_run_choices` carries current selections and `confirmed_gate_outputs` carries current gate results. Skill orchestration MUST pass this scoped handoff rather than substituting raw conversation history.
+
 ## HUMAN AUTHORITY CONTRACT
 
 **Codex expands. Human selects.**
@@ -258,7 +300,7 @@ Interaction System v1 is `THREE_MODE_INTERACTION_SYSTEM_V1_ACCEPTED` / `ACCEPTED
 
 Route explicit mode first, then the small natural-language vocabulary in [creative-modes.md](references/creative-modes.md). If routing is unclear, default to `AI_DECIDE`. All modes use one `CreativeInteractionSession` and one pipeline:
 
-`INPUT → CHARACTER_EXPLORE → CHARACTER_DIRECTION_RESOLUTION → CHARACTER_PLANNING → ART_EXPLORE → ART_DIRECTION_RESOLUTION → VISUAL_PREFERENCE_RESOLUTION → FINAL_DESIGN → PLAYABLE_CHARACTER_DESIGN_GATE → PROMPT_COMPILATION → GENERATION_READY`
+`INPUT → BUILD_CURRENT_RUN_CONTEXT → CHARACTER_EXPLORE → CHARACTER_DIRECTION_RESOLUTION → CHARACTER_PLANNING → ART_EXPLORE → ART_DIRECTION_RESOLUTION → VISUAL_PREFERENCE_RESOLUTION → FINAL_DESIGN → PLAYABLE_CHARACTER_DESIGN_GATE → NOVELTY_GUARD → PROMPT_COMPILATION → GENERATION_READY`
 
 Only the `GateResolver` changes by mode. `QuickGateResolver` uses low-depth automatic fill and never waits; `AIDecideGateResolver` performs full deterministic exploration and records `delegated_ai`; `UserDecideGateResolver` stops only at the three high-impact gates. The pipeline does not branch on mode.
 
@@ -287,15 +329,51 @@ The runner chooses a stable `interaction_locale` at workflow creation. Chinese a
 
 Quick is speed-first and low-depth; AI Decide is quality-first and full-depth. Both preserve explicit user constraints and run the same Style, Regional, Lower-Body, Playable Character Design, Pose, and Prompt Audit rules. User Decide exposes one Visual Preference Sheet instead of dozens of field-by-field turns; implementation variables remain AI-owned.
 
+Mode resolution is structurally distinct. Each direction candidate carries a replayable `DesignDNA` across silhouette, hair structure, horn topology, costume topology, exposure, legwear, footwear, pose, tail, wings, palette, material, and background. `QUICK` uses a runtime-seeded bounded sample from the compatible DNA pool; the seed is persisted for replay. `AI_DECIDE` generates the full small pool, validates structural diversity, then evaluates and selects a candidate. Hair or eye color alone never counts as meaningful diversity, and `USER_DECIDE` keeps the same DNA on the Human-selected direction while resolving only the remaining fields.
+
 The local runtime handoff stops at `GENERATION_READY`. After that boundary, Codex Skill orchestration may call built-in `$imagegen`, then runs the existing S1 style check and Anatomy Integrity Check before normal Human Review. It does not silently redesign or endlessly regenerate. Persistent Interactive Workflow v1 is `PERSISTENT_INTERACTIVE_WORKFLOW_V1_ACCEPTED` / `ACCEPTED / FROZEN`; the anime constitution is immutable; `Pose System v1` remains `ACCEPTED / FROZEN` and is only consumed by the shared pipeline.
 
 Existing post-generation variants remain optional design actions and are not a new mode or a hard gate. Human-approved Canon, anatomy, and pose contracts remain authoritative; an aesthetic recommendation is not a hard gate.
+
+## IMAGE-LEVEL VISUAL ADHERENCE CRITIC
+
+After one image is generated, an optional `VisualAdherenceCritic` may review the actual image against the persisted `PromptAdherenceManifest` and `VisualSpecificationContract`. Its field results are manifest-driven and may be `PASS`, `PARTIAL`, `FAIL`, or `NOT_EVALUABLE`; anatomy output includes `hand_anatomy_check` and `foot_visibility_and_integrity_check`. The review only detects, reports, and classifies: it must not rewrite prompts, change DesignDNA, auto-fix, regenerate, run best-of-N, or introduce similarity scoring. `record_visual_adherence_review` persists the result for artifacts and replay; `repair_targets` are suggestions for a separately authorized future action.
+
+## TARGETED VISUAL REPAIR LOOP
+
+An explicitly authorized repair uses only the current run's `VisualAdherenceCritic.repair_targets`, current `PromptBundle`, `VisualSpecificationContract`, and `PromptAdherenceManifest`. It must not read previous runs or rerun Character Direction, Art Direction, DesignDNA generation, QUICK/AI_DECIDE/USER_DECIDE, or any diversity strategy. `PASS` HARD fields become structured `locked_fields` and are preserved exactly; only the reported targets enter `TARGETED REPAIR`. `TYPE 3` uses replacement instructions, while `TYPE 4` strengthens the named feature without redesigning the rest.
+
+The runtime currently exposes text-to-image generation as an external Skill handoff; it has no image-edit or mask adapter. Therefore repair is bounded full-image constrained regeneration: `Original PromptBundle + VisualRepairPlan → RepairPromptBundle → external ImageGen → observation → VisualAdherenceCritic`. The original prompt is never mutated. A repair must be re-reviewed before acceptance; `PASS → PARTIAL/FAIL` on a previously passing field is `REGRESSION`, and the original remains the best artifact. The first version permits at most two repair attempts and persists each plan, exact repair prompt, image path, review, outcome, and best-artifact decision under `artifacts/repair/attempt_NN/`. Repeating a completed `attempt_id` reads its persisted result and must not regenerate.
 
 ## Interaction runtime and generation boundary
 
 The implementation lives in `runtime/interaction_runtime.py` and reuses `runtime/visual_preference_runtime.py` plus `runtime/regional_style_runtime.py`. Final prompt compilation is allowed only after the selected mode's resolution strategy has produced a complete design. `GENERATION_READY` means the `PromptBundle` is valid and ready for the Skill's later `$imagegen` phase; it is not itself a generated asset or Human aesthetic approval.
 
-The Skill owns intent interpretation, possibility expansion, human selection/mix interpretation, Character Planning, Art Planning, Design Ownership guidance, Visual Preference reporting, Identity/Canon guidance, Anatomy QA guidance, optional review, and artifact naming. `runtime/visual_preference_runtime.py` owns the fail-closed Visual Preference Gate, selection sources, Human Audit Policy, pose-option prevalidation, report artifacts, and state transitions; `runtime/leg_separation_runtime.py` owns the hard contract, pose-family validation, PromptCompiler geometry vocabulary, actual-image gate, candidate promotion, migration, and bounded pose-only repair flow. A host Runtime may add hashes, lineage, artifact paths, revision limits, Anime Style Constitution checks, and post-generation Anatomy Integrity. `anime-character-imagegen` remains the later image execution seam; it is not used before the visual preferences are locked.
+## VISUAL SPECIFICATION CONTRACT / PROMPT ADHERENCE
+
+Before prompt compilation, Final Design is converted into a `VisualSpecificationContract`. `HARD` fields lock structural choices (silhouette, hair, horns, costume, exposure, legwear, footwear, pose, wings, and tail); `STRONG` fields carry palette, materials, accessories, body-line emphasis, background, and visual style; `SOFT` fields carry semantic intent only. Identity/archetype never supplies missing visual structure.
+
+Prompt priority is `current-run explicit user selection > Final Design/DesignDNA hard fields > Art Direction > Character Direction > semantic intent`. The compiler emits a `PromptAdherenceManifest` and field-specific anti-substitution constraints, then blocks `PROMPT_CONSTRAINT_CONFLICT` before `GENERATION_READY` when positive prompt text contradicts a locked field. Semantic words such as elegant, alluring, or dangerous must not silently expand into costume, footwear, pose, hair, or background choices.
+
+`DesignDNA` keeps `pose_family` for compatibility and now carries structured `PoseDNA` for lower body, weight, torso, shoulders, arms, hands, head, gaze, and gesture energy. It also carries executable `BackgroundDNA` for environment, architecture presence/language, spatial structure, atmosphere, lighting, ground, depth, and complexity. Abstract labels such as `layered pressure field` are only soft labels; they must be expanded into these spatial fields. `architecture_presence: none` is explicit and receives only minimal anti-substitution protection. Explicit user pose or gesture fields remain HARD and outrank semantic intent; no face-adjacent hand gesture is inferred as a default.
+
+## VISUAL CONTEXT FIREWALL
+
+The reasoning firewall above runs before the runtime firewall. Every new character-generation run defaults to `inherit_previous_visuals = false`. Previous-run characters, candidates, prompts, image descriptions, and visual critic summaries are retained for logs, replay, debugging, and future anti-repetition analysis only; they are not positive context for Character Designer, Art/Style Direction, Visual Preference resolution, or image-prompt assembly. The runtime persists `allowed_visual_inheritance`, `blocked_context_sources`, and `visual_context_firewall_applied` on the session, Final Design, and PromptBundle handoff.
+
+Only an explicit user request such as “沿用上一版”“参考上一张”“基于前一个角色做变体”“保留红色长发”, or an explicit continuation/variation/inheritance request may enable inheritance. Specific requests are filtered to the named visual fields; unspecified historical features remain blocked. Current user input, current-run gate outputs, current-run selections, and the global style contract remain allowed generation context. Historical data has a one-way `anti_repetition_only` path and must never be appended to designer or final image prompts by default.
+
+## CROSS-RUN NOVELTY GUARD
+
+`NoveltyGuard` runs after Final Design is built and before `PromptCompiler`. It extracts a compact `DesignSignature` from the current Final Design/DesignDNA, then compares it with a configurable window of completed fresh-run signatures. The history snapshot contains only structured fields and run metadata; prompts, chat history, image descriptions, and critic prose never enter this path.
+
+Structural similarity (silhouette, costume, body structure, footwear, horns, wings, and pose structure) has higher weight than secondary fields. Hair structure, exposure, legwear, tail, materials, and background are secondary; hair color, eye color, palette, and minor ornament are cosmetic. A color reskin cannot pass as a new design, while a structurally different character in the same archetype may pass.
+
+Results are `PASS`, `BORDERLINE`, `FAIL`, or `EXEMPT`. Explicit inheritance, same-character variation, paired/twin continuity, or uniform continuity is `EXEMPT`; partial inheritance is limited to the named fields. QUICK tries the next deterministic eligible candidate, AI_DECIDE filters collision candidates without replacing quality selection, and USER_DECIDE preserves Human-selected fields while recording `human_override_novelty` when necessary. Resolution attempts are bounded and replay uses the first saved history snapshot. Repair artifacts do not create additional history signatures.
+
+The one-way boundary is: `completed runs → DesignSignature → NoveltyGuard`. It is never `history → designer`, `history → art direction`, `history → visual preference`, `history → PromptCompiler`, or `history → repair prompt`.
+
+The Skill owns intent interpretation, possibility expansion, human selection/mix interpretation, Character Planning, Art Planning, Design Ownership guidance, Visual Preference reporting, Identity/Canon guidance, Anatomy QA guidance, optional review, and artifact naming. `runtime/visual_preference_runtime.py` owns the fail-closed Visual Preference Gate, selection sources, Human Audit Policy, pose-option prevalidation, report artifacts, and state transitions; `runtime/leg_separation_runtime.py` owns the hard contract, pose-family validation, PromptCompiler geometry vocabulary, actual-image gate, candidate promotion, migration, and bounded pose-only repair flow; `runtime/visual_repair.py` owns current-run-only repair planning, prompt compilation, comparison, regression detection, and best-artifact selection. A host Runtime may add hashes, lineage, artifact paths, revision limits, Anime Style Constitution checks, and post-generation Anatomy Integrity. `anime-character-imagegen` remains the later image execution seam; it is not used before the visual preferences are locked.
 
 ## Front-facing pose dry-run — current temporal hunter
 

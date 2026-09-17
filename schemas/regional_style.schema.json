@@ -25,6 +25,8 @@
     "actual_pose_features": {"$ref": "#/$defs/actualPoseFeatures"},
     "pose_intent_result": {"enum": ["STRONG", "ACCEPTABLE", "WEAK", "FAIL"]},
     "pose_intent_failure_type": {"type": "array", "items": {"$ref": "#/$defs/poseIntentFailureType"}},
+    "visual_specification_contract": {"$ref": "#/$defs/visualSpecificationContract"},
+    "prompt_adherence_manifest": {"$ref": "#/$defs/visualSpecificationContract"},
     "pose_diversity_ledger": {"$ref": "#/$defs/poseDiversityLedger"},
     "leg_crossing_risk": {"enum": ["LOW", "MEDIUM", "HIGH", "FORBIDDEN"]},
     "centerline_crossing": {"type": ["boolean", "null"]},
@@ -81,9 +83,58 @@
         "negative_constraints": {"type": "array", "items": {"type": "string"}},
         "lower_body_variables": {"type": "object"},
         "lower_body_constraints": {"type": "array", "items": {"type": "string"}},
+        "visual_specification_contract": {"$ref": "#/$defs/visualSpecificationContract"},
+        "prompt_adherence_manifest": {"$ref": "#/$defs/visualSpecificationContract"},
         "pose_intent": {"$ref": "#/$defs/poseIntentType"},
         "pose_intent_contract": {"$ref": "#/$defs/poseIntentContract"},
         "prompt": {"type": "string", "minLength": 1}
+      }
+    },
+    "visualSpecificationContract": {
+      "type": "object",
+      "required": ["hard_constraints", "strong_preferences", "soft_intent", "anti_substitution", "priority_order", "schema_version"],
+      "properties": {
+        "hard_constraints": {"type": "object", "additionalProperties": {"type": "string"}},
+        "strong_preferences": {"type": "object", "additionalProperties": {"type": "string"}},
+        "soft_intent": {"type": "object", "additionalProperties": {"type": "string"}},
+        "anti_substitution": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+        "pose_specification": {
+          "type": "object",
+          "properties": {
+            "lower_body_pose": {"type": "string"},
+            "weight_distribution": {"type": "string"},
+            "torso_orientation": {"type": "string"},
+            "shoulder_line": {"type": "string"},
+            "arm_configuration": {"type": "string"},
+            "left_arm_action": {"type": "string"},
+            "right_arm_action": {"type": "string"},
+            "left_hand_gesture": {"type": "string"},
+            "right_hand_gesture": {"type": "string"},
+            "head_attitude": {"type": "string"},
+            "gaze_direction": {"type": "string"},
+            "gesture_energy": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
+        "background_specification": {
+          "type": "object",
+          "properties": {
+            "environment_type": {"type": "string"},
+            "architecture_presence": {"type": "string"},
+            "architecture_language": {"type": "string"},
+            "spatial_structure": {"type": "string"},
+            "atmosphere": {"type": "string"},
+            "lighting_context": {"type": "string"},
+            "ground_plane": {"type": "string"},
+            "depth_structure": {"type": "string"},
+            "background_complexity": {"type": "string"},
+            "dominant_shape_language": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
+        "explicit_hard_fields": {"type": "array", "items": {"type": "string"}},
+        "priority_order": {"type": "array", "items": {"type": "string"}},
+        "schema_version": {"type": "string", "minLength": 1}
       }
     },
     "lowerBodyDesign": {

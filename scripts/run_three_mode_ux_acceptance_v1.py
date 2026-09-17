@@ -203,13 +203,22 @@ def run_a2(ctx: CaseContext) -> Review:
         ai_response = ai.start("完整设计一个冷淡的成年女性角色，细节都你决定。")
         quick_session = quick.runtime.load_session(quick_response.session_id)
         ai_session = ai.runtime.load_session(ai_response.session_id)
-        quick_depth = len(quick_session.character_explore_result) + len(quick_session.art_explore_result)
-        ai_depth = len(ai_session.character_explore_result) + len(ai_session.art_explore_result)
-        good = quick_depth < ai_depth
+        quick_character_meta = (quick_session.selected_character_direction or {}).get("resolution_metadata", {})
+        quick_art_meta = (quick_session.selected_art_direction or {}).get("resolution_metadata", {})
+        ai_character_meta = (ai_session.selected_character_direction or {}).get("resolution_metadata", {})
+        ai_art_meta = (ai_session.selected_art_direction or {}).get("resolution_metadata", {})
+        good = (
+            quick_character_meta.get("strategy") == "seeded_structured_sampling"
+            and quick_art_meta.get("strategy") == "seeded_structured_sampling"
+            and ai_character_meta.get("strategy") == "divergent_candidate_generation_then_score_selection"
+            and ai_art_meta.get("strategy") == "divergent_candidate_generation_then_score_selection"
+            and "evaluated_candidate_ids" not in quick_character_meta
+            and "evaluated_candidate_ids" in ai_character_meta
+        )
         ctx.before = {"quick": quick_session.to_dict(), "ai_decide": ai_session.to_dict()}
         ctx.extra_sessions = {"quick_response": response_view(quick_response), "ai_response": response_view(ai_response)}
         ctx.transcript = [{"user_input": "快速设计一个冷淡的成年女性角色。", "system_output": response_view(quick_response)}, {"user_input": "完整设计一个冷淡的成年女性角色，细节都你决定。", "system_output": response_view(ai_response)}]
-        return Review("PASS" if good else "FAIL", 1 if good else 2, "NO", "PASS", "PASS" if good else "FAIL", [] if good else ["QUICK_AI_DECIDE_COLLAPSE"], f"exploration depth quick={quick_depth}, ai_decide={ai_depth}.")
+        return Review("PASS" if good else "FAIL", 1 if good else 2, "NO", "PASS", "PASS" if good else "FAIL", [] if good else ["QUICK_AI_DECIDE_COLLAPSE"], f"resolution strategies quick={quick_character_meta.get('strategy')!r}/{quick_art_meta.get('strategy')!r}, ai_decide={ai_character_meta.get('strategy')!r}/{ai_art_meta.get('strategy')!r}.")
     finally:
         quick.close()
         ai.close()
@@ -225,7 +234,7 @@ def run_u1_t2(ctx: CaseContext) -> Review:
     start_user(ctx, "给我设计一个成年女性角色，先给我几个方向，我自己选。")
     response = ctx.natural("B")
     session = ctx.runtime.load_session(ctx.primary_session_id or "")
-    good = response.status == SessionStatus.AWAITING_ART_DIRECTION.value and session.selected_character_direction and session.selected_character_direction.get("id") == "B"
+    good = response.status == SessionStatus.AWAITING_ART_DIRECTION.value and session.selected_character_direction and session.selected_character_direction.get("id") == "candidate_02"
     return Review("PASS" if good else "FAIL", 1 if good else 4, "NO" if good else "YES", "PASS", "PASS" if good else "FAIL", [] if good else ["NATURAL_LANGUAGE_ACTION_PARSE_FAILURE", "USER_SELECTION_NOT_APPLIED"], f"natural B resolved as {session.selected_character_direction and session.selected_character_direction.get('id')!r}.")
 
 
@@ -234,7 +243,7 @@ def run_u1_t3(ctx: CaseContext) -> Review:
     resolve_character(ctx, "B")
     response = ctx.natural("A的轮廓不错，但我更喜欢C的整体感觉，混一下。")
     session = ctx.runtime.load_session(ctx.primary_session_id or "")
-    good = response.status == SessionStatus.AWAITING_VISUAL_PREFERENCES.value and session.selected_art_direction and session.selected_art_direction.get("id") == "A+C"
+    good = response.status == SessionStatus.AWAITING_VISUAL_PREFERENCES.value and session.selected_art_direction and session.selected_art_direction.get("id") == "candidate_01+candidate_03"
     return Review("PASS" if good else "FAIL", 1 if good else 4, "NO" if good else "YES", "PASS", "PASS" if good else "FAIL", [] if good else ["NATURAL_LANGUAGE_ACTION_PARSE_FAILURE", "PROVENANCE_MISCLASSIFIED"], f"art result id={session.selected_art_direction and session.selected_art_direction.get('id')!r}.")
 
 
@@ -261,7 +270,7 @@ def run_u2_t2(ctx: CaseContext) -> Review:
     ctx.natural("为什么推荐B？")
     response = ctx.natural("行，那我选C。")
     session = ctx.runtime.load_session(ctx.primary_session_id or "")
-    good = session.selected_character_direction and session.selected_character_direction.get("id") == "C"
+    good = session.selected_character_direction and session.selected_character_direction.get("id") == "candidate_03"
     return Review("PASS" if good else "FAIL", 1 if good else 4, "NO" if good else "YES", "PASS", "PASS" if good else "FAIL", [] if good else ["NATURAL_LANGUAGE_ACTION_PARSE_FAILURE", "USER_SELECTION_NOT_APPLIED"], f"observed selected character={session.selected_character_direction and session.selected_character_direction.get('id')!r}.")
 
 
@@ -362,12 +371,12 @@ def run_r1(ctx: CaseContext) -> Review:
     session_id = ctx.primary_session_id or ""
     restarted = InteractionRuntime(ctx.runtime.session_root)
     session = restarted.load_session(session_id)
-    event = InteractionEvent(uuid4().hex, session_id, session.current_gate or "", InteractionAction.SELECT.value, {"candidate_id": "B"})
+    event = InteractionEvent(uuid4().hex, session_id, session.current_gate or "", InteractionAction.SELECT.value, {"candidate_id": "candidate_02"})
     response = restarted.resume_session(session_id, event)
     ctx.record({"restart": True, **event.to_dict()}, response)
     ctx.runtime = restarted
     final = ctx.runtime.load_session(session_id)
-    good = response.status == SessionStatus.AWAITING_VISUAL_PREFERENCES.value and final.selected_character_direction and final.selected_character_direction.get("id") == "B"
+    good = response.status == SessionStatus.AWAITING_VISUAL_PREFERENCES.value and final.selected_character_direction and final.selected_character_direction.get("id") == "candidate_02"
     return Review("PASS" if good else "FAIL", 1 if good else 4, "NO", "PASS" if good else "FAIL", "PASS" if good else "FAIL", [] if good else ["RESUME_FAILURE", "SESSION_RESET_UNEXPECTEDLY"], f"after restart status={response.status}; preserved character={final.selected_character_direction and final.selected_character_direction.get('id')!r}.")
 
 
@@ -422,7 +431,7 @@ def run_i4(ctx: CaseContext) -> Review:
     response = start_user(ctx, "给我四个角色方向，我自己选。")
     second = ctx.natural("第二个。")
     session = ctx.runtime.load_session(ctx.primary_session_id or "")
-    good_second = session.selected_character_direction and session.selected_character_direction.get("id") == "B"
+    good_second = session.selected_character_direction and session.selected_character_direction.get("id") == "candidate_02"
     ctx.natural("中间那个。")
     good_ambiguity = ctx.runtime.load_session(ctx.primary_session_id or "").status == SessionStatus.AWAITING_ART_DIRECTION.value
     good = good_second and good_ambiguity
@@ -517,7 +526,7 @@ def run_ux1(ctx: CaseContext) -> Review:
     start_user(ctx, "给我几个方向，我来选。")
     responses = [ctx.natural(text) for text in ("第二个", "A的头发和C的衣服拼一下")]
     session = ctx.runtime.load_session(ctx.primary_session_id or "")
-    good = responses[0].status == SessionStatus.AWAITING_ART_DIRECTION.value and session.selected_character_direction and session.selected_character_direction.get("id") == "B" and session.selected_art_direction and session.selected_art_direction.get("id") == "A+C"
+    good = responses[0].status == SessionStatus.AWAITING_ART_DIRECTION.value and session.selected_character_direction and session.selected_character_direction.get("id") == "candidate_02" and session.selected_art_direction and session.selected_art_direction.get("id") == "candidate_01+candidate_03"
     return Review("PASS" if good else "FAIL", 1 if good else 5, "NO" if good else "YES", "PASS", "PASS" if good else "FAIL", [] if good else ["NATURAL_LANGUAGE_ACTION_PARSE_FAILURE"], f"short reply and natural mix sampled; character={session.selected_character_direction and session.selected_character_direction.get('id')!r}; art={session.selected_art_direction and session.selected_art_direction.get('id')!r}.")
 
 

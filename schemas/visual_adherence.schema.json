@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "visual_adherence.schema.json",
+  "title": "VisualAdherenceReview",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "actual_image",
+    "overall_result",
+    "field_results",
+    "failure_types",
+    "not_evaluable_fields",
+    "anatomy_check",
+    "repair_targets",
+    "summary",
+    "evidence_source",
+    "prompt_hash",
+    "manifest_fields"
+  ],
+  "properties": {
+    "actual_image": {"type": "string", "minLength": 1},
+    "overall_result": {"enum": ["PASS", "PARTIAL", "FAIL"]},
+    "field_results": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["required", "observed", "result", "failure_types", "rationale"],
+        "properties": {
+          "required": {},
+          "observed": {},
+          "result": {"enum": ["PASS", "PARTIAL", "FAIL", "NOT_EVALUABLE"]},
+          "failure_types": {"type": "array", "items": {"type": "string", "pattern": "^TYPE [1-6]$"}},
+          "rationale": {"type": "string"}
+        }
+      }
+    },
+    "failure_types": {"type": "array", "items": {"type": "string", "pattern": "^TYPE [1-6]$"}},
+    "not_evaluable_fields": {"type": "array", "items": {"type": "string"}},
+    "anatomy_check": {
+      "type": "object",
+      "required": ["result", "hand_anatomy_check", "foot_visibility_and_integrity_check"],
+      "properties": {
+        "result": {"enum": ["PASS", "FAIL", "NOT_EVALUABLE"]},
+        "hand_anatomy_check": {"type": "object"},
+        "foot_visibility_and_integrity_check": {"type": "object"}
+      }
+    },
+    "repair_targets": {"type": "array", "items": {"type": "object"}},
+    "summary": {"type": "string"},
+    "evidence_source": {"type": "string"},
+    "prompt_hash": {"type": ["string", "null"]},
+    "manifest_fields": {"type": "array", "items": {"type": "string"}},
+    "actual_image_hash": {"type": ["string", "null"]},
+    "review_id": {"type": ["string", "null"]},
+    "generation_id": {"type": ["string", "null"]}
+  }
+}

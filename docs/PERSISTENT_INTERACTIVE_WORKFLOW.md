@@ -55,6 +55,8 @@ The native adapter is a presentation/orchestration boundary: Python owns checkpo
 
 `GENERATION_READY` remains the local runtime boundary. After it, the Codex Skill orchestration may continue with built-in `$imagegen` only after the design is valid, then run the existing Style and Anatomy quality audit before Human Review.
 
+An explicitly authorized targeted visual repair is a post-generation action on the same run. It uses the current `VisualAdherenceCritic.repair_targets`, locks passing HARD fields, compiles a separate `RepairPromptBundle`, and requires a fresh external observation/critic review. The runtime has no image-edit or mask backend, so the first version uses bounded full-image regeneration with a maximum of two idempotent attempts; repair artifacts and `best_artifact` are replayable without calling ImageGen.
+
 ## Persistence and restart
 
 The runner uses temporary-file replacement for `workflow_run.json`, while the existing session runtime uses the same atomic-save pattern for `session.json`. A fresh `PersistentWorkflowRunner` pointed at the same session root can load the run and continue it without any user-visible restart ceremony.

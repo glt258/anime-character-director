@@ -15,6 +15,7 @@ from runtime.interaction_runtime import (  # noqa: E402
     InteractionRuntime,
     SessionStatus,
 )
+from runtime.visual_context_firewall import VisualContextFirewall  # noqa: E402
 
 
 def _event(runtime: InteractionRuntime, session_id: str, action: str, payload: dict | None = None, *, event_id: str | None = None) -> InteractionEvent:
@@ -183,6 +184,95 @@ def test_legacy_artifact_loads_with_ai_decide_default(tmp_path: Path) -> None:
     assert session.creation_mode == CreationMode.AI_DECIDE.value
     assert session.status == SessionStatus.AWAITING_ART_DIRECTION.value
     assert session.legacy_artifacts["prompt"] == "old character"
+
+
+def test_new_run_defaults_to_visual_isolation_and_keeps_history_analysis_only() -> None:
+    from tempfile import TemporaryDirectory
+
+    request = "使用 AI_DECIDE 模式画一个魅魔角色，要求有魅魔角，体现魅力，性感暴露但是不涉黄"
+    old_visuals = {
+        "visual_preferences": {
+            "hair_color": "crimson long hair",
+            "horns": "large ram horns",
+            "tail": "heart tail",
+            "background_direction": "gothic cathedral",
+            "footwear_family": "high heel ankle boots",
+            "pose": "hand touching cheek",
+        },
+        "image_prompt": "old prompt",
+        "critic_summary": "old visual summary",
+    }
+    with TemporaryDirectory() as directory:
+        runtime = InteractionRuntime(directory)
+        runtime.create_session(request, CreationMode.AI_DECIDE)
+        second = runtime.create_session(request, CreationMode.AI_DECIDE)
+        session = runtime.load_session(second.session_id)
+        generation = json.dumps(
+            {
+                "character_explore_result": session.character_explore_result,
+                "art_explore_result": session.art_explore_result,
+                "visual_preference_sheet": session.visual_preference_sheet,
+                "final_design": session.final_design,
+                "compiled_prompt": session.compiled_prompt,
+            },
+            ensure_ascii=False,
+        )
+        analysis = VisualContextFirewall().anti_repetition_context(old_visuals)
+        assert session.inherit_previous_visuals is False
+        assert session.allowed_visual_inheritance == []
+        assert session.visual_context_firewall_applied is True
+        assert all(marker not in generation for marker in ("crimson long hair", "large ram horns", "heart tail", "gothic cathedral", "high heel ankle boots", "hand touching cheek"))
+        assert "gothic cathedral" in json.dumps(analysis, ensure_ascii=False)
+        assert analysis["generation_allowed"] is False
+
+
+def test_explicit_visual_inheritance_is_limited_to_named_features() -> None:
+    request = "沿用上一版的红色长发，但其他设计重新做。"
+    constraints = {
+        "explicit_user_fields": ["hair_color", "hair_style_family"],
+        "hair_color": "红发",
+        "hair_style_family": "long hair",
+    }
+    firewall = VisualContextFirewall.from_request(request, constraints)
+    context = firewall.generation_context(
+        current_user_request=request,
+        historical_visual_context={
+            "visual_preferences": {
+                "hair_color": "红发",
+                "hair_style_family": "long hair",
+                "outfit_direction": "gothic cathedral attire",
+                "pose": "hand touching cheek",
+            }
+        },
+    )
+    assert firewall.inherit_previous_visuals is True
+    assert set(firewall.allowed_visual_inheritance) == {"hair_color=红发", "hair_style_family=long hair"}
+    assert context["explicitly_inherited_visuals"] == {"hair_color": "红发", "hair_style_family": "long hair"}
+    assert "outfit_direction" not in context["explicitly_inherited_visuals"]
+    assert "pose" not in context["explicitly_inherited_visuals"]
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory() as directory:
+        response = InteractionRuntime(directory).create_session(request, CreationMode.AI_DECIDE)
+        session = InteractionRuntime(directory).load_session(response.session_id)
+        prompt = session.compiled_prompt["prompt"]
+        assert "红发" in prompt and "long hair" in prompt
+        assert "gothic cathedral" not in prompt
+
+
+def test_historical_visual_context_never_enters_default_generation_context() -> None:
+    history = {"prompt": "crimson long hair, gothic cathedral", "critic": "heart tail"}
+    firewall = VisualContextFirewall()
+    generation = firewall.generation_context(
+        current_user_request="new adult succubus character",
+        current_run_choices=({"id": "current"},),
+        historical_visual_context=history,
+    )
+    analysis = firewall.anti_repetition_context(history)
+    assert "explicitly_inherited_visuals" not in generation
+    assert "history" not in generation
+    assert "gothic cathedral" not in json.dumps(generation, ensure_ascii=False)
+    assert "gothic cathedral" in json.dumps(analysis, ensure_ascii=False)
 
 
 if __name__ == "__main__":

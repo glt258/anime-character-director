@@ -9,11 +9,317 @@ without creating a second character-design system.
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict, dataclass, field
+import hashlib
+import random
 import re
 from typing import Any, Mapping, Sequence
 
 
 CANDIDATE_GENERATOR_VERSION = "CONTEXT_AWARE_DYNAMIC_INTERACTION_CANDIDATES_V1"
+
+DESIGN_DNA_FIELDS = (
+    "silhouette_family",
+    "hair_structure",
+    "horn_topology",
+    "upper_body_structure",
+    "lower_body_structure",
+    "costume_topology",
+    "exposure_strategy",
+    "legwear_strategy",
+    "footwear_category",
+    "accessory_density",
+    "pose_family",
+    "body_line_emphasis",
+    "tail_design",
+    "wing_strategy",
+    "palette_family",
+    "material_language",
+    "background_family",
+    "pose_specification",
+    "background_specification",
+)
+
+POSE_SPECIFICATION_FIELDS = (
+    "lower_body_pose",
+    "weight_distribution",
+    "torso_orientation",
+    "shoulder_line",
+    "arm_configuration",
+    "left_arm_action",
+    "right_arm_action",
+    "left_hand_gesture",
+    "right_hand_gesture",
+    "head_attitude",
+    "gaze_direction",
+    "gesture_energy",
+)
+
+BACKGROUND_SPECIFICATION_FIELDS = (
+    "environment_type",
+    "architecture_presence",
+    "architecture_language",
+    "spatial_structure",
+    "atmosphere",
+    "lighting_context",
+    "ground_plane",
+    "depth_structure",
+    "background_complexity",
+    "dominant_shape_language",
+)
+
+
+_POSE_SPECIFICATIONS: dict[str, dict[str, str]] = {
+    "OPEN_PARALLEL_STANCE": {
+        "lower_body_pose": "open parallel stance",
+        "weight_distribution": "balanced",
+        "torso_orientation": "front-facing",
+        "shoulder_line": "level relaxed",
+        "arm_configuration": "asymmetric open gesture",
+        "left_arm_action": "relaxed at side",
+        "right_arm_action": "extended outward",
+        "left_hand_gesture": "relaxed fingers",
+        "right_hand_gesture": "open palm outward",
+        "head_attitude": "level",
+        "gaze_direction": "direct viewer gaze",
+        "gesture_energy": "open confident",
+    },
+    "NARROW_SEPARATED_STANCE": {
+        "lower_body_pose": "narrow separated stance",
+        "weight_distribution": "upright balanced",
+        "torso_orientation": "upright vertical",
+        "shoulder_line": "slightly asymmetric",
+        "arm_configuration": "both arms relaxed apart",
+        "left_arm_action": "resting near waist",
+        "right_arm_action": "raised beside shoulder",
+        "left_hand_gesture": "relaxed fingers",
+        "right_hand_gesture": "open palm outward",
+        "head_attitude": "slight tilt",
+        "gaze_direction": "direct viewer gaze",
+        "gesture_energy": "composed restrained",
+    },
+    "FORWARD_STEP_NON_CROSSING": {
+        "lower_body_pose": "forward step with separate leg lanes",
+        "weight_distribution": "forward-weighted",
+        "torso_orientation": "slight forward lean",
+        "shoulder_line": "active diagonal",
+        "arm_configuration": "one arm extended, one lowered",
+        "left_arm_action": "reaching forward",
+        "right_arm_action": "relaxed at side",
+        "left_hand_gesture": "reaching outward",
+        "right_hand_gesture": "neutral hanging hand",
+        "head_attitude": "slightly lowered",
+        "gaze_direction": "forward focus",
+        "gesture_energy": "direct active",
+    },
+    "OFFSET_NON_OVERLAPPING_STANCE": {
+        "lower_body_pose": "offset separated stance",
+        "weight_distribution": "asymmetric balanced",
+        "torso_orientation": "slight three-quarter turn",
+        "shoulder_line": "subtle diagonal",
+        "arm_configuration": "one arm extended, one lowered",
+        "left_arm_action": "relaxed at side",
+        "right_arm_action": "extended outward",
+        "left_hand_gesture": "neutral relaxed fingers",
+        "right_hand_gesture": "open palm outward",
+        "head_attitude": "level",
+        "gaze_direction": "direct viewer gaze",
+        "gesture_energy": "controlled directional",
+    },
+    "ASYMMETRIC_WEIGHT_STANCE": {
+        "lower_body_pose": "asymmetric planted stance",
+        "weight_distribution": "single-leg dominant",
+        "torso_orientation": "upright vertical",
+        "shoulder_line": "asymmetric relaxed",
+        "arm_configuration": "both arms relaxed apart",
+        "left_arm_action": "resting near waist",
+        "right_arm_action": "relaxed at side",
+        "left_hand_gesture": "relaxed fingers",
+        "right_hand_gesture": "neutral hanging hand",
+        "head_attitude": "slight tilt",
+        "gaze_direction": "side glance",
+        "gesture_energy": "quiet asymmetry",
+    },
+    "LOW_ENERGY_SEPARATED_STANCE": {
+        "lower_body_pose": "narrow stable separated stance",
+        "weight_distribution": "single-leg dominant",
+        "torso_orientation": "upright vertical",
+        "shoulder_line": "lowered relaxed",
+        "arm_configuration": "both arms relaxed low",
+        "left_arm_action": "hanging relaxed at side",
+        "right_arm_action": "resting at waist",
+        "left_hand_gesture": "neutral relaxed fingers",
+        "right_hand_gesture": "neutral relaxed fingers",
+        "head_attitude": "slight side turn",
+        "gaze_direction": "off-camera",
+        "gesture_energy": "quiet low-energy",
+    },
+    "WIDE_ACTIVE_STANCE": {
+        "lower_body_pose": "wide grounded stance",
+        "weight_distribution": "low-center balanced",
+        "torso_orientation": "counter-rotated",
+        "shoulder_line": "strong diagonal",
+        "arm_configuration": "asymmetric open gesture",
+        "left_arm_action": "extended sideways",
+        "right_arm_action": "resting at waist",
+        "left_hand_gesture": "open palm outward",
+        "right_hand_gesture": "relaxed fingers",
+        "head_attitude": "chin raised",
+        "gaze_direction": "direct viewer gaze",
+        "gesture_energy": "bold grounded",
+    },
+}
+
+
+def pose_specification_for_family(pose_family: Any) -> dict[str, str]:
+    """Return a deterministic whole-body pose spec without face-adjacent defaults."""
+    key = str(pose_family or "OPEN_PARALLEL_STANCE").upper()
+    source = _POSE_SPECIFICATIONS.get(key, _POSE_SPECIFICATIONS["OPEN_PARALLEL_STANCE"])
+    return {name: source[name] for name in POSE_SPECIFICATION_FIELDS}
+
+
+def background_specification_for_family(background_family: Any) -> dict[str, str]:
+    """Expand a legacy background label into executable spatial constraints."""
+    text = str(background_family or "").lower()
+    abstract = {
+        "environment_type": "abstract",
+        "architecture_presence": "none",
+        "architecture_language": "none",
+        "spatial_structure": "layered luminous planes",
+        "atmosphere": "soft haze",
+        "lighting_context": "diffuse commercial key light",
+        "ground_plane": "abstract gradient base",
+        "depth_structure": "soft atmospheric depth",
+        "background_complexity": "medium",
+        "dominant_shape_language": "clean vertical planes",
+    }
+    if any(token in text for token in ("pressure", "motion", "arc")):
+        abstract.update(
+            spatial_structure="layered directional planes",
+            atmosphere="high-contrast energy haze",
+            lighting_context="directional rim light",
+            dominant_shape_language="diagonal pressure arcs",
+        )
+    if "spotlight" in text:
+        abstract.update(
+            spatial_structure="flat graphic planes",
+            atmosphere="clean stage haze",
+            lighting_context="single controlled spotlight",
+            background_complexity="low",
+            dominant_shape_language="circular spotlight bands",
+        )
+    if "ritual" in text or "architectural" in text:
+        return {
+            "environment_type": "ritual space",
+            "architecture_presence": "minimal",
+            "architecture_language": "minimal ceremonial",
+            "spatial_structure": "shallow ceremonial layers",
+            "atmosphere": "quiet mist",
+            "lighting_context": "soft backlight",
+            "ground_plane": "visible matte floor",
+            "depth_structure": "soft atmospheric depth",
+            "background_complexity": "medium",
+            "dominant_shape_language": "vertical frames and restrained rings",
+        }
+    if any(token in text for token in ("urban", "city")):
+        return {
+            "environment_type": "urban exterior",
+            "architecture_presence": "supporting",
+            "architecture_language": "modern geometric",
+            "spatial_structure": "offset facade depth",
+            "atmosphere": "clean dusk air",
+            "lighting_context": "cool ambient light with one warm accent",
+            "ground_plane": "visible reflective pavement",
+            "depth_structure": "layered city depth",
+            "background_complexity": "medium",
+            "dominant_shape_language": "vertical planes and thin lines",
+        }
+    if any(token in text for token in ("industrial", "workshop")):
+        return {
+            "environment_type": "industrial exterior",
+            "architecture_presence": "supporting",
+            "architecture_language": "industrial geometric",
+            "spatial_structure": "deep corridor structure",
+            "atmosphere": "high-contrast atmosphere",
+            "lighting_context": "hard side light with cool fill",
+            "ground_plane": "visible matte industrial floor",
+            "depth_structure": "deep layered perspective",
+            "background_complexity": "medium-high",
+            "dominant_shape_language": "beams, planes, and modular frames",
+        }
+    return abstract
+
+
+@dataclass(frozen=True)
+class DesignDNA:
+    silhouette_family: str
+    hair_structure: str
+    horn_topology: str
+    upper_body_structure: str
+    lower_body_structure: str
+    costume_topology: str
+    exposure_strategy: str
+    legwear_strategy: str
+    footwear_category: str
+    accessory_density: str
+    pose_family: str
+    body_line_emphasis: str
+    tail_design: str
+    wing_strategy: str
+    palette_family: str
+    material_language: str
+    background_family: str
+    pose_specification: Mapping[str, str] = field(default_factory=dict)
+    background_specification: Mapping[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        data["pose_specification"] = dict(self.pose_specification) or pose_specification_for_family(self.pose_family)
+        data["background_specification"] = dict(self.background_specification) or background_specification_for_family(self.background_family)
+        return data
+
+
+_SUCCUBUS_DNA: tuple[DesignDNA, ...] = (
+    DesignDNA(
+        "tapered_hourglass_frame", "short_wavy_side_sweep", "swept_back_blade_horns",
+        "fitted_wrap_bodice", "open_hip_leg_line", "bodysuit_plus_cropped_outer_layer",
+        "waist_and_back_exposure", "bare_legs", "tall_flat_boots", "one_primary_anchor",
+        "OPEN_PARALLEL_STANCE", "forward_shoulders_long_leg_line", "thin_spade_tail",
+        "minimal_membrane_wings", "plum_and_copper", "matte_satin_and_soft_leather",
+        "clean_gradient_architecture",
+    ),
+    DesignDNA(
+        "vertical_ritual_frame", "high_ponytail_with_ribbon_mass", "crown_like_horns",
+        "structured_shouldered_bodice", "split_skirt_columns", "asymmetric_ritual_dress",
+        "shoulder_and_back_exposure", "sheer_side_panels", "barefoot_ankle_jewelry", "sparse_symbolic_anchor",
+        "NARROW_SEPARATED_STANCE", "elegant_vertical_line", "ribboned_arrow_tail",
+        "translucent_wing_motif", "oxblood_and_aged_ivory", "satin_organza_and_brushed_metal",
+        "quiet_architectural_haze",
+    ),
+    DesignDNA(
+        "low_center_predatory_frame", "braided_medium_side_mass", "branching_compact_horns",
+        "cropped_structured_top", "shorts_with_long_split_overskirt", "shorts_plus_split_overskirt",
+        "thigh_and_side_cutout", "opaque_thigh_wraps", "combat_boots", "dense_single_anchor",
+        "FORWARD_STEP_NON_CROSSING", "low_center_aggressive_shoulders", "visible_barbed_tail",
+        "visible_demon_wings", "deep_teal_and_crimson", "brushed_leather_and_translucent_film",
+        "layered_pressure_field",
+    ),
+    DesignDNA(
+        "narrow_dominant_frame", "layered_bob_with_side_lock", "narrow_rear_horns",
+        "open_structured_top", "fitted_trousers", "tailored_trousers_plus_open_top",
+        "cleavage_and_waist_framing", "none", "platform_shoes", "minimal_graphic_anchor",
+        "LOW_ENERGY_SEPARATED_STANCE", "relaxed_dominant_vertical_line", "segmented_ribbon_tail",
+        "no_physical_wings_symbolic_motif", "violet_and_graphite", "structured_crepe_and_polished_resin",
+        "abstract_spotlight_gradient",
+    ),
+)
+
+_DEFAULT_DNA: tuple[DesignDNA, ...] = (
+    DesignDNA("vertical_spine", "asymmetric_long_layers", "compact_upward_sweep", "structured_shell", "open_trouser_line", "tailored_layered", "controlled_partial_exposure", "none", "low_asymmetrical_boots", "one_primary_anchor", "OPEN_PARALLEL_STANCE", "balanced_vertical_line", "thin_spade_tail", "none", "deep_teal_with_warm_accent", "matte_satin", "clean_gradient_architecture"),
+    DesignDNA("offset_balance", "short_geometric_bob", "offset_side_sweep", "soft_structured_wrap", "split_skirt_columns", "offset_layered", "shoulder_and_waist_framing", "sheer_side_panels", "flat_sneakers", "sparse_symbolic_anchor", "NARROW_SEPARATED_STANCE", "asymmetric_weight_line", "ribbon_tail", "abstract_motif", "violet_and_graphite", "soft_fabric_and_resin", "quiet_architectural_haze"),
+    DesignDNA("layered_motion", "braided_side_mass", "branching_compact_sweep", "modular_short_outer", "shorts_with_long_split_layer", "modular_split", "side_cutout", "opaque_wraps", "combat_boots", "single_structural_anchor", "FORWARD_STEP_NON_CROSSING", "forward_motion_line", "visible_tail", "partial_membrane", "cobalt_with_copper", "light_panel_and_brushed_metal", "layered_motion_field"),
+    DesignDNA("material_hook_frame", "medium_directional_layers", "narrow_rear_sweep", "open_structured_top", "fitted_trousers", "material_contrast_tailoring", "back_framing", "none", "barefoot_ankle_structure", "minimal_graphic_anchor", "LOW_ENERGY_SEPARATED_STANCE", "calm_dominant_line", "none", "none", "sage_and_ink", "matte_crepe_and_polished_resin", "clean_atmospheric_gradient"),
+)
 
 
 def _has(text: str, *terms: str) -> bool:
@@ -26,6 +332,8 @@ def candidate_compatibility(candidate: Mapping[str, Any], constraints: Mapping[s
     candidate_text = str(candidate).lower()
     candidate_attributes = candidate.get("attributes") if isinstance(candidate.get("attributes"), Mapping) else {}
     candidate_attributes = {**candidate_attributes, **{key: value for key, value in candidate.items() if key in {"hair_color", "hair_style_family", "archetype"}}}
+    dna = candidate.get("design_dna") if isinstance(candidate.get("design_dna"), Mapping) else {}
+    candidate_attributes = {**candidate_attributes, **dict(dna)}
     violations = []
     for item in constraints.get("prohibited_constraints", ()):
         if not isinstance(item, Mapping):
@@ -41,6 +349,16 @@ def candidate_compatibility(candidate: Mapping[str, Any], constraints: Mapping[s
             matched = all(alias in candidate_text for alias in aliases if alias)
         if matched:
             violations.append(str(item.get("text", "prohibited constraint")))
+    negative = constraints.get("negative_constraints") if isinstance(constraints.get("negative_constraints"), Mapping) else {}
+    footwear = str(dna.get("footwear_category", "")).lower()
+    pose = str(dna.get("pose_family", "")).lower()
+    costume = f"{dna.get('costume_topology', '')} {dna.get('lower_body_structure', '')}".lower()
+    if negative.get("forbid_footwear_family") and any(token in footwear for token in ("heel", "platform")):
+        violations.append("high heels")
+    if negative.get("forbid_crossed_legs") and any(token in pose for token in ("cross", "coy")):
+        violations.append("crossed legs")
+    if negative.get("forbid_outfit_lower") and str(negative["forbid_outfit_lower"]).lower() in costume:
+        violations.append(str(negative["forbid_outfit_lower"]))
     return {"status": "incompatible" if violations else "compatible", "violations": violations}
 
 
@@ -55,6 +373,53 @@ def context_profile(original_input: str, constraints: Mapping[str, Any] | None =
     if _has(text, "都市", "城市", "现代", "幻想", "观察", "克制", "危险", "urban", "city", "fantasy"):
         return "urban_watchful"
     return "specific_adult"
+
+
+def _design_dna_library(original_input: str) -> tuple[DesignDNA, ...]:
+    text = f"{original_input}".lower()
+    if _has(text, "魅魔", "succubus", "demoness"):
+        return _SUCCUBUS_DNA
+    return _DEFAULT_DNA
+
+
+def normalize_design_seed(seed: Any) -> int:
+    if seed is None:
+        return 0
+    try:
+        return int(seed)
+    except (TypeError, ValueError):
+        digest = hashlib.sha256(str(seed).encode("utf-8")).digest()
+        return int.from_bytes(digest[:8], "big")
+
+
+def stable_session_seed(session_id: str) -> int:
+    return normalize_design_seed(session_id)
+
+
+def select_seeded_candidate(candidates: Sequence[Mapping[str, Any]], seed: Any, *, salt: str) -> dict[str, Any]:
+    if not candidates:
+        raise ValueError("cannot select from an empty candidate set")
+    rng = random.Random(f"{normalize_design_seed(seed)}:{salt}")
+    return deepcopy(candidates[rng.randrange(len(candidates))])
+
+
+def select_ai_candidate(candidates: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    if not candidates:
+        raise ValueError("cannot select from an empty candidate set")
+    ranked = sorted(
+        enumerate(candidates),
+        key=lambda pair: (pair[1].get("score", 0), pair[1].get("recommendation_score", 0), -pair[0]),
+        reverse=True,
+    )
+    selected = deepcopy(ranked[0][1])
+    selected["resolution_metadata"] = {
+        "mode": "AI_DECIDE",
+        "strategy": "divergent_candidate_generation_then_score_selection",
+        "candidate_pool_size": len(candidates),
+        "evaluated_candidate_ids": [str(item.get("id")) for item in candidates],
+        "selected_candidate_id": str(selected.get("id")),
+    }
+    return selected
 
 
 def _route(
@@ -167,14 +532,56 @@ def _prior_label(prior_resolutions: Sequence[Mapping[str, Any]]) -> str:
 
 def validate_candidate_diversity(candidates: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     comparisons = []
-    fields = ("semantic", "silhouette", "outfit_structure", "personality_read", "visual_anchor")
+    fields = DESIGN_DNA_FIELDS
     for index, left in enumerate(candidates):
         for right in candidates[index + 1 :]:
-            left_sig = left.get("diversity_signature", {})
-            right_sig = right.get("diversity_signature", {})
+            left_sig = _structural_signature(left)
+            right_sig = _structural_signature(right)
             overlaps = {name: int(left_sig.get(name) == right_sig.get(name)) for name in fields}
-            comparisons.append({"left": left.get("id"), "right": right.get("id"), "overlap": overlaps, "valid": sum(overlaps.values()) <= 2})
-    return {"valid": all(item["valid"] for item in comparisons), "comparisons": comparisons, "checked_dimensions": list(fields)}
+            differences = sum(not value for value in overlaps.values())
+            comparisons.append({"left": left.get("id"), "right": right.get("id"), "overlap": overlaps, "structural_differences": differences, "valid": differences >= 2})
+    valid = all(item["valid"] for item in comparisons)
+    return {
+        "valid": valid,
+        "status": "PASS" if valid else "LOW_STRUCTURAL_DIVERSITY",
+        "comparisons": comparisons,
+        "checked_dimensions": list(fields),
+        "cosmetic_dimensions": ["hair_color", "eye_color", "accessory_tint"],
+    }
+
+
+def _structural_signature(candidate: Mapping[str, Any]) -> dict[str, Any]:
+    dna = candidate.get("design_dna") if isinstance(candidate.get("design_dna"), Mapping) else {}
+    visual = candidate.get("visual_implications") if isinstance(candidate.get("visual_implications"), Mapping) else {}
+    silhouette = visual.get("silhouette") if isinstance(visual.get("silhouette"), Mapping) else {}
+    aliases = {
+        "silhouette_family": ("silhouette_family", "silhouette", silhouette.get("en")),
+        "hair_structure": ("hair_structure", "hair_style_family"),
+        "horn_topology": ("horn_topology", "ear_horn_shape"),
+        "upper_body_structure": ("upper_body_structure", "upper_body"),
+        "lower_body_structure": ("lower_body_structure", "lower_body"),
+        "costume_topology": ("costume_topology", "outfit_direction", "costume_structure"),
+        "exposure_strategy": ("exposure_strategy",),
+        "legwear_strategy": ("legwear_strategy", "legwear_family"),
+        "footwear_category": ("footwear_category", "footwear_family"),
+        "accessory_density": ("accessory_density",),
+        "pose_family": ("pose_family",),
+        "body_line_emphasis": ("body_line_emphasis",),
+        "tail_design": ("tail_design", "tail"),
+        "wing_strategy": ("wing_strategy", "wings"),
+        "palette_family": ("palette_family", "dominant_palette", "palette"),
+        "material_language": ("material_language",),
+        "background_family": ("background_family", "background_direction"),
+        "pose_specification": ("pose_specification",),
+        "background_specification": ("background_specification",),
+    }
+    signature = {}
+    for name, keys in aliases.items():
+        value = next((dna[key] for key in keys if key in dna), None)
+        if value is None:
+            value = next((candidate[key] for key in keys if key in candidate), None)
+        signature[name] = str(value) if value is not None else "<unspecified>"
+    return signature
 
 
 class CandidateGenerator:
@@ -187,9 +594,11 @@ class CandidateGenerator:
         original_input: str,
         explicit_constraints: Mapping[str, Any] | None = None,
         prior_resolutions: Sequence[Mapping[str, Any]] = (),
+        generation_context: Mapping[str, Any] | None = None,
         style_policy: str = "CONTEMPORARY_COMMERCIAL_GACHA_ANIME",
         locale: str = "en-US",
         revision: int = 0,
+        seed: Any = None,
     ) -> list[dict[str, Any]]:
         constraints = dict(explicit_constraints or {})
         profile = context_profile(original_input, constraints)
@@ -199,10 +608,13 @@ class CandidateGenerator:
             shift = revision % len(routes)
             routes = routes[shift:] + routes[:shift]
         prior_label = _prior_label(prior_resolutions)
+        dna_library = _design_dna_library(original_input)
         result = []
         for index, route in enumerate(routes, start=1):
             context_note_zh = f"围绕已选的“{prior_label}”继续展开。" if kind == "art" and prior_resolutions else ""
             context_note_en = f"Continues from the selected {prior_label}." if kind == "art" and prior_resolutions else ""
+            dna = dna_library[(index - 1) % len(dna_library)]
+            dna_dict = dna.to_dict()
             result.append({
                 "id": f"candidate_{index:02d}",
                 "candidate_id": f"candidate_{index:02d}",
@@ -228,12 +640,15 @@ class CandidateGenerator:
                 "score": route["score"],
                 "identity_source": "context_aware_candidate_generator",
                 "candidate_generator_version": CANDIDATE_GENERATOR_VERSION,
+                "design_dna": dna_dict,
                 "generation_context": {
                     "profile": profile,
                     "gate_id": gate_id,
                     "style_policy": style_policy,
                     "revision": revision,
+                    "seed": normalize_design_seed(seed) if seed is not None else None,
                     "prior_direction": prior_label if prior_resolutions else None,
+                    **dict(generation_context or {}),
                 },
                 "diversity_signature": {
                     "semantic": route["tags"][0],
@@ -241,6 +656,16 @@ class CandidateGenerator:
                     "outfit_structure": route["tags"][2],
                     "personality_read": route["tags"][3],
                     "visual_anchor": route["slug"],
+                    "upper_body_gesture": dna_dict["pose_specification"].get("arm_configuration"),
+                    "hand_gesture": [
+                        dna_dict["pose_specification"].get("left_hand_gesture"),
+                        dna_dict["pose_specification"].get("right_hand_gesture"),
+                    ],
+                    "background_structure": [
+                        dna_dict["background_specification"].get("environment_type"),
+                        dna_dict["background_specification"].get("architecture_presence"),
+                        dna_dict["background_specification"].get("spatial_structure"),
+                    ],
                 },
             })
         for item in result:
@@ -278,4 +703,20 @@ class CandidateGenerator:
         return {"status": "compatible", "checked": checked, "violations": [], "constraint_source": "original_input_and_explicit_constraints"}
 
 
-__all__ = ["CANDIDATE_GENERATOR_VERSION", "CandidateGenerator", "candidate_compatibility", "context_profile", "validate_candidate_diversity"]
+__all__ = [
+    "CANDIDATE_GENERATOR_VERSION",
+    "DESIGN_DNA_FIELDS",
+    "POSE_SPECIFICATION_FIELDS",
+    "BACKGROUND_SPECIFICATION_FIELDS",
+    "DesignDNA",
+    "CandidateGenerator",
+    "candidate_compatibility",
+    "context_profile",
+    "normalize_design_seed",
+    "select_ai_candidate",
+    "select_seeded_candidate",
+    "stable_session_seed",
+    "validate_candidate_diversity",
+    "pose_specification_for_family",
+    "background_specification_for_family",
+]

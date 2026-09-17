@@ -202,3 +202,15 @@
 - preserved compound negation scope with structured `prohibited_constraints` units for combinations, concepts, and archetype boundaries
 - added NEG-SCOPE-01..08 and REC-01..06 coverage, candidate compatibility checks, PromptCompiler scope propagation, and unresolved-only recommendation aliases
 - retained Character A/B/C/D USER_DECIDE primary benchmark evidence; QUICK / AI_DECIDE remains paused and imagegen_calls is 0
+
+## [2026-09-17] fix | TARGETED_REPAIR_HARDENING_AND_ARTIFACT_CONTINUITY_V1
+- added independent HARD locking and regression classification for `lower_body_structure`; preserved `palette_family` as STRONG while adding repair-only visual-direction preservation
+- persisted strict original-generation identity and exact prompt/manifest/contract references; bound reviews, repair attempts, and best artifacts to generation hashes and ids
+- retained legacy read compatibility as `legacy_incomplete`; focused runtime/critic/repair/session tests passed without ImageGen
+
+## [2026-09-17] implementation | CROSS_RUN_NOVELTY_GUARD_V1
+- added structured `DesignSignature` and weighted `NoveltyGuard` comparison with structural, secondary, and cosmetic fields plus `PASS` / `BORDERLINE` / `FAIL` / `EXEMPT`
+- connected post-design evaluation to the session pipeline; QUICK uses deterministic alternate candidates, AI_DECIDE filters novelty failures after quality eligibility, and USER_DECIDE preserves Human choices with an auditable override
+- persisted recent fresh-run signatures in a separate history ledger and saved the first snapshot/review for replay; repairs do not create additional signatures
+- kept history one-way into novelty analysis only; no ImageGen, embedding, image similarity, critic, repair, or DesignDNA changes
+- added 21 focused tests and updated Skill/workflow/architecture documentation

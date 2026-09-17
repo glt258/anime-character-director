@@ -43,6 +43,12 @@ class WorkflowRunStatus(str, Enum):
     RESUMING = "RESUMING"
     GENERATION_READY = "GENERATION_READY"
     GENERATING = "GENERATING"
+    ADHERENCE_REVIEWED = "ADHERENCE_REVIEWED"
+    REPAIR_PLANNED = "REPAIR_PLANNED"
+    REPAIR_GENERATED = "REPAIR_GENERATED"
+    REPAIR_REVIEWED = "REPAIR_REVIEWED"
+    ACCEPTED = "ACCEPTED"
+    REPAIR_EXHAUSTED = "REPAIR_EXHAUSTED"
     COMPLETED = "COMPLETED"
     BLOCKED = "BLOCKED"
     CANCELLED = "CANCELLED"
@@ -139,6 +145,7 @@ class WorkflowRun:
     last_user_message: str | None = None
     last_resolved_checkpoint: str | None = None
     last_native_submission: str | None = None
+    design_seed: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -152,6 +159,7 @@ class WorkflowRun:
         values.setdefault("last_user_message", None)
         values.setdefault("last_resolved_checkpoint", None)
         values.setdefault("last_native_submission", None)
+        values.setdefault("design_seed", None)
         return cls(**values)
 
 
@@ -494,11 +502,12 @@ class PersistentWorkflowRunner:
             self._save_run(run)
         return WorkflowResponse(run.run_id, run.status, run.current_stage, localizer.message_for(raw_response, checkpoint), checkpoint, raw_response.status == "GENERATION_READY", raw_response.error_code, run.session_id)
 
-    def start_workflow(self, user_input: str, mode: str | CreationMode | None = None, *, generation_requested: bool = False, interaction_locale: str | None = None) -> WorkflowResponse:
+    def start_workflow(self, user_input: str, mode: str | CreationMode | None = None, *, generation_requested: bool = False, interaction_locale: str | None = None, seed: int | None = None) -> WorkflowResponse:
         run_id = uuid4().hex
         session_id = uuid4().hex
-        raw_response = self.runtime.create_session(user_input, mode, session_id=session_id)
-        run = WorkflowRun(run_id, session_id, raw_response.mode, user_input, WorkflowRunStatus.RUNNING.value, raw_response.stage, generation_requested=generation_requested, interaction_locale=infer_interaction_locale(user_input, interaction_locale))
+        raw_response = self.runtime.create_session(user_input, mode, session_id=session_id, seed=seed)
+        saved_session = self.runtime.load_session(session_id)
+        run = WorkflowRun(run_id, session_id, raw_response.mode, user_input, WorkflowRunStatus.RUNNING.value, raw_response.stage, generation_requested=generation_requested, interaction_locale=infer_interaction_locale(user_input, interaction_locale), design_seed=saved_session.design_seed)
         self._save_run(run)
         localizer = InteractionLocalizer(run.interaction_locale)
         return self._checkpoint_response(run, raw_response, localizer)
@@ -694,9 +703,98 @@ class PersistentWorkflowRunner:
         run = self._load_run(run_id)
         return self._load_checkpoint(run, checkpoint_id)
 
+    def record_visual_adherence_review(
+        self,
+        run_id: str,
+        actual_image: str | Path,
+        *,
+        observations: Mapping[str, Any],
+        prompt_hash: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist one post-generation review on the run's underlying session."""
+        run = self._load_run(run_id)
+        review = self.runtime.record_visual_adherence_review(
+            run.session_id,
+            actual_image,
+            observations=observations,
+            prompt_hash=prompt_hash,
+        )
+        run.status = WorkflowRunStatus.ACCEPTED.value if review.get("overall_result") == "PASS" else WorkflowRunStatus.ADHERENCE_REVIEWED.value
+        self._save_run(run)
+        return review
 
-def start_workflow(session_root: str | Path, user_input: str, mode: str | CreationMode | None = None, *, generation_requested: bool = False, interaction_locale: str | None = None) -> WorkflowResponse:
-    return PersistentWorkflowRunner(session_root).start_workflow(user_input, mode, generation_requested=generation_requested, interaction_locale=interaction_locale)
+    def record_generation_artifact(
+        self,
+        run_id: str,
+        image: str | Path,
+        *,
+        generation_id: str | None = None,
+        prompt_hash: str | None = None,
+    ) -> dict[str, Any]:
+        run = self._load_run(run_id)
+        artifact = self.runtime.record_generation_artifact(
+            run.session_id,
+            image,
+            run_id=run.run_id,
+            generation_id=generation_id,
+            prompt_hash=prompt_hash,
+        )
+        self._save_run(run)
+        return artifact
+
+    def build_visual_repair_plan(
+        self,
+        run_id: str,
+        *,
+        max_attempts: int = 2,
+        include_minor: bool = True,
+    ) -> dict[str, Any]:
+        run = self._load_run(run_id)
+        result = self.runtime.build_visual_repair_plan(run.session_id, max_attempts=max_attempts, include_minor=include_minor)
+        run.status = str(result.get("status", run.status))
+        self._save_run(run)
+        return result
+
+    def record_visual_repair_generation(
+        self,
+        run_id: str,
+        attempt_id: str,
+        repair_image: str | Path,
+        *,
+        repair_prompt: str | None = None,
+        prompt_hash: str | None = None,
+    ) -> dict[str, Any]:
+        run = self._load_run(run_id)
+        result = self.runtime.record_visual_repair_generation(
+            run.session_id,
+            attempt_id,
+            repair_image,
+            repair_prompt=repair_prompt,
+            prompt_hash=prompt_hash,
+        )
+        run.status = WorkflowRunStatus.REPAIR_GENERATED.value
+        self._save_run(run)
+        return result
+
+    def record_visual_repair_review(
+        self,
+        run_id: str,
+        attempt_id: str,
+        *,
+        observations: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        run = self._load_run(run_id)
+        result = self.runtime.record_visual_repair_review(run.session_id, attempt_id, observations=observations)
+        run.status = {
+            "ACCEPTED": WorkflowRunStatus.ACCEPTED.value,
+            "REPAIR_EXHAUSTED": WorkflowRunStatus.REPAIR_EXHAUSTED.value,
+        }.get(self.runtime.load_session(run.session_id).repair_status or "", WorkflowRunStatus.REPAIR_REVIEWED.value)
+        self._save_run(run)
+        return result
+
+
+def start_workflow(session_root: str | Path, user_input: str, mode: str | CreationMode | None = None, *, generation_requested: bool = False, interaction_locale: str | None = None, seed: int | None = None) -> WorkflowResponse:
+    return PersistentWorkflowRunner(session_root).start_workflow(user_input, mode, generation_requested=generation_requested, interaction_locale=interaction_locale, seed=seed)
 
 
 def continue_workflow(session_root: str | Path, run_id: str, user_message: str, *, checkpoint_id: str | None = None) -> WorkflowResponse:
@@ -715,6 +813,76 @@ def continue_native_workflow(session_root: str | Path, run_id: str, answer: Mapp
     return PersistentWorkflowRunner(session_root).continue_native_workflow(run_id, answer, checkpoint_id=checkpoint_id)
 
 
+def record_visual_adherence_review(
+    session_root: str | Path,
+    run_id: str,
+    actual_image: str | Path,
+    *,
+    observations: Mapping[str, Any],
+    prompt_hash: str | None = None,
+) -> dict[str, Any]:
+    return PersistentWorkflowRunner(session_root).record_visual_adherence_review(
+        run_id,
+        actual_image,
+        observations=observations,
+        prompt_hash=prompt_hash,
+    )
+
+
+def record_generation_artifact(
+    session_root: str | Path,
+    run_id: str,
+    image: str | Path,
+    *,
+    generation_id: str | None = None,
+    prompt_hash: str | None = None,
+) -> dict[str, Any]:
+    return PersistentWorkflowRunner(session_root).record_generation_artifact(
+        run_id,
+        image,
+        generation_id=generation_id,
+        prompt_hash=prompt_hash,
+    )
+
+
+def build_visual_repair_plan(
+    session_root: str | Path,
+    run_id: str,
+    *,
+    max_attempts: int = 2,
+    include_minor: bool = True,
+) -> dict[str, Any]:
+    return PersistentWorkflowRunner(session_root).build_visual_repair_plan(run_id, max_attempts=max_attempts, include_minor=include_minor)
+
+
+def record_visual_repair_generation(
+    session_root: str | Path,
+    run_id: str,
+    attempt_id: str,
+    repair_image: str | Path,
+    *,
+    repair_prompt: str | None = None,
+    prompt_hash: str | None = None,
+) -> dict[str, Any]:
+    return PersistentWorkflowRunner(session_root).record_visual_repair_generation(
+        run_id,
+        attempt_id,
+        repair_image,
+        repair_prompt=repair_prompt,
+        prompt_hash=prompt_hash,
+    )
+
+
+def record_visual_repair_review(
+    session_root: str | Path,
+    run_id: str,
+    attempt_id: str,
+    *,
+    observations: Mapping[str, Any],
+) -> dict[str, Any]:
+    return PersistentWorkflowRunner(session_root).record_visual_repair_review(run_id, attempt_id, observations=observations)
+
+
 __all__ = [
     "CUSTOM_INPUT_GATE",
     "CUSTOM_OPTION_ID",
@@ -727,10 +895,15 @@ __all__ = [
     "WorkflowResponse",
     "WorkflowRun",
     "WorkflowRunStatus",
+    "build_visual_repair_plan",
     "continue_active_workflow",
     "continue_native_workflow",
     "continue_workflow",
     "infer_interaction_locale",
     "native_interaction_spec",
+    "record_generation_artifact",
+    "record_visual_adherence_review",
+    "record_visual_repair_generation",
+    "record_visual_repair_review",
     "start_workflow",
 ]

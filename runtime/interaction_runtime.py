@@ -10,6 +10,7 @@ from copy import deepcopy
 from dataclasses import MISSING, asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
+from hashlib import sha256
 import json
 from pathlib import Path
 import re
@@ -20,6 +21,8 @@ try:
     from .regional_style_runtime import (
         DEFAULT_REGIONAL_VISUAL_LANGUAGE,
         PromptCompiler,
+        PromptConstraintConflict,
+        build_visual_specification_contract,
     )
     from .visual_preference_runtime import (
         AI_IMPLEMENTATION_VARIABLES,
@@ -28,9 +31,36 @@ try:
         VisualPreferenceSession,
     )
     from .natural_language_interaction import ExplicitConstraintExtractor, NaturalLanguageInteractionParser
-    from .interaction_candidates import CANDIDATE_GENERATOR_VERSION, CandidateGenerator, context_profile
+    from .interaction_candidates import (
+        BACKGROUND_SPECIFICATION_FIELDS,
+        CANDIDATE_GENERATOR_VERSION,
+        CandidateGenerator,
+        POSE_SPECIFICATION_FIELDS,
+        context_profile,
+        select_ai_candidate,
+        select_seeded_candidate,
+        stable_session_seed,
+    )
+    from .visual_context_firewall import DEFAULT_BLOCKED_CONTEXT_SOURCES, VisualContextFirewall
+    from .cross_run_novelty import DesignSignature, NoveltyGuard, NoveltyPolicy
+    from .visual_adherence_critic import VisualAdherenceCritic, VisualAdherenceReview
+    from .visual_repair import (
+        MAX_REPAIR_ATTEMPTS,
+        VisualRepairError,
+        VisualRepairPlan,
+        build_repair_plan,
+        compile_repair_prompt,
+        evaluate_repair_attempt,
+        initial_best_artifact,
+        select_best_artifact,
+    )
 except ImportError:  # pragma: no cover - supports direct host imports
-    from regional_style_runtime import DEFAULT_REGIONAL_VISUAL_LANGUAGE, PromptCompiler  # type: ignore
+    from regional_style_runtime import (  # type: ignore
+        DEFAULT_REGIONAL_VISUAL_LANGUAGE,
+        PromptCompiler,
+        PromptConstraintConflict,
+        build_visual_specification_contract,
+    )
     from visual_preference_runtime import (  # type: ignore
         AI_IMPLEMENTATION_VARIABLES,
         AI_PROPOSED_OPTIONAL_VARIABLES,
@@ -38,10 +68,35 @@ except ImportError:  # pragma: no cover - supports direct host imports
         VisualPreferenceSession,
     )
     from natural_language_interaction import ExplicitConstraintExtractor, NaturalLanguageInteractionParser  # type: ignore
-    from interaction_candidates import CANDIDATE_GENERATOR_VERSION, CandidateGenerator, context_profile  # type: ignore
+    from interaction_candidates import (  # type: ignore
+        BACKGROUND_SPECIFICATION_FIELDS,
+        CANDIDATE_GENERATOR_VERSION,
+        CandidateGenerator,
+        POSE_SPECIFICATION_FIELDS,
+        context_profile,
+        select_ai_candidate,
+        select_seeded_candidate,
+        stable_session_seed,
+    )
+    from visual_context_firewall import DEFAULT_BLOCKED_CONTEXT_SOURCES, VisualContextFirewall  # type: ignore
+    from cross_run_novelty import DesignSignature, NoveltyGuard, NoveltyPolicy  # type: ignore
+    from visual_adherence_critic import VisualAdherenceCritic, VisualAdherenceReview  # type: ignore
+    from visual_repair import (  # type: ignore
+        MAX_REPAIR_ATTEMPTS,
+        VisualRepairError,
+        VisualRepairPlan,
+        build_repair_plan,
+        compile_repair_prompt,
+        evaluate_repair_attempt,
+        initial_best_artifact,
+        select_best_artifact,
+    )
 
 
-INTERACTION_SESSION_VERSION = "1.0.0"
+INTERACTION_SESSION_VERSION = "1.1.0"
+ARTIFACT_CONTINUITY_PENDING = "strict_pending_generation"
+ARTIFACT_CONTINUITY_COMPLETE = "strict_complete"
+ARTIFACT_CONTINUITY_LEGACY = "legacy_incomplete"
 
 
 class _ValueEnum(str, Enum):
@@ -224,6 +279,40 @@ class InteractiveResponse:
         return cls(**values)
 
 
+@dataclass(frozen=True)
+class GenerationArtifact:
+    generation_id: str
+    run_id: str
+    image_path: str
+    image_hash: str
+    prompt_hash: str
+    prompt_bundle_ref: str
+    manifest_ref: str
+    contract_ref: str
+    mode: str
+    design_seed: int | None
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "GenerationArtifact":
+        return cls(
+            generation_id=str(data.get("generation_id", "")),
+            run_id=str(data.get("run_id", "")),
+            image_path=str(data.get("image_path", data.get("image", ""))),
+            image_hash=str(data.get("image_hash", "")),
+            prompt_hash=str(data.get("prompt_hash", "")),
+            prompt_bundle_ref=str(data.get("prompt_bundle_ref", "")),
+            manifest_ref=str(data.get("manifest_ref", "")),
+            contract_ref=str(data.get("contract_ref", "")),
+            mode=str(data.get("mode", "")),
+            design_seed=data.get("design_seed"),
+            created_at=str(data.get("created_at", "")),
+        )
+
+
 @dataclass
 class CreativeInteractionSession:
     session_id: str
@@ -233,6 +322,11 @@ class CreativeInteractionSession:
     current_gate: str | None = None
     status: str = SessionStatus.CREATED.value
     explicit_user_constraints: dict[str, Any] = field(default_factory=dict)
+    inherit_previous_visuals: bool = False
+    allowed_visual_inheritance: list[str] = field(default_factory=list)
+    blocked_context_sources: list[str] = field(default_factory=lambda: list(DEFAULT_BLOCKED_CONTEXT_SOURCES))
+    visual_context_firewall_applied: bool = True
+    design_seed: int | None = None
     pending_constraint_updates: dict[str, Any] = field(default_factory=dict)
     delegated_fields: list[str] = field(default_factory=list)
     locked_fields: dict[str, Any] = field(default_factory=dict)
@@ -247,6 +341,7 @@ class CreativeInteractionSession:
     final_design: dict[str, Any] | None = None
     design_gate_result: dict[str, Any] | None = None
     compiled_prompt: dict[str, Any] | None = None
+    visual_adherence_review: dict[str, Any] | None = None
     audit_log: list[dict[str, Any]] = field(default_factory=list)
     interaction_history: list[dict[str, Any]] = field(default_factory=list)
     created_at: str = field(default_factory=_now)
@@ -262,6 +357,21 @@ class CreativeInteractionSession:
     processed_event_responses: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_response: dict[str, Any] | None = None
     legacy_artifacts: dict[str, Any] = field(default_factory=dict)
+    original_image: str | None = None
+    original_visual_adherence_review: dict[str, Any] | None = None
+    repair_attempts: list[dict[str, Any]] = field(default_factory=list)
+    best_artifact: dict[str, Any] | None = None
+    repair_status: str | None = None
+    generation_artifact: dict[str, Any] | None = None
+    artifact_continuity: str = ARTIFACT_CONTINUITY_PENDING
+    design_signature: dict[str, Any] | None = None
+    novelty_review: dict[str, Any] | None = None
+    novelty_history_snapshot: list[dict[str, Any]] | None = None
+    novelty_candidate_reviews: dict[str, Any] = field(default_factory=dict)
+    novelty_policy: dict[str, Any] = field(default_factory=lambda: NoveltyPolicy().to_dict())
+    novelty_resolution_attempt: int = 0
+    novelty_status: str | None = None
+    human_override_novelty: bool = False
 
     def __post_init__(self) -> None:
         self.creation_mode = str(_value(self.creation_mode))
@@ -284,7 +394,20 @@ class CreativeInteractionSession:
         values.setdefault("schema_version", INTERACTION_SESSION_VERSION)
         values.setdefault("interaction_session_version", values["schema_version"])
         values.setdefault("legacy_artifacts", {})
+        if "artifact_continuity" not in raw:
+            values["artifact_continuity"] = ARTIFACT_CONTINUITY_LEGACY
+        if raw.get("generation_artifact") and isinstance(raw.get("generation_artifact"), Mapping):
+            values["generation_artifact"] = deepcopy(dict(raw["generation_artifact"]))
         return cls(**values)
+
+
+def _session_firewall(session: CreativeInteractionSession) -> VisualContextFirewall:
+    return VisualContextFirewall(
+        bool(session.inherit_previous_visuals),
+        tuple(session.allowed_visual_inheritance),
+        tuple(session.blocked_context_sources),
+        bool(session.visual_context_firewall_applied),
+    )
 
 
 def _legacy_mode(mode: Any) -> str:
@@ -304,6 +427,7 @@ def migrate_legacy_artifact(data: Mapping[str, Any], *, session_id: str | None =
     session = CreativeInteractionSession.from_dict({**dict(data), "session_id": session_id or data.get("session_id") or uuid4().hex})
     if not data.get("interaction_session_version"):
         session.legacy_artifacts = deepcopy(dict(data))
+        session.artifact_continuity = ARTIFACT_CONTINUITY_LEGACY
         old_state = str(data.get("state", "")).upper()
         state_map = {
             "AWAITING_CHARACTER_SELECTION": SessionStatus.AWAITING_CHARACTER_DIRECTION.value,
@@ -347,9 +471,25 @@ def _option(option_id: str, value: Any, reason: str) -> dict[str, Any]:
     return {"id": option_id, "value": value, "reason": reason, "diversity_risk": "low"}
 
 
-def _visual_sheet(constraints: Mapping[str, Any], *, original_input: str | None = None, prior_resolutions: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+def _direction_design_dna(prior_resolutions: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    for item in list(prior_resolutions):
+        direction = item.get("direction") if isinstance(item, Mapping) else None
+        if isinstance(direction, Mapping) and isinstance(direction.get("design_dna"), Mapping):
+            return deepcopy(dict(direction["design_dna"]))
+    return {}
+
+
+def _visual_sheet(
+    constraints: Mapping[str, Any],
+    *,
+    original_input: str | None = None,
+    prior_resolutions: Sequence[Mapping[str, Any]] = (),
+    visual_context_firewall: VisualContextFirewall | Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    firewall = VisualContextFirewall.from_metadata(visual_context_firewall)
     raw_input = str(original_input or constraints.get("raw", ""))
     profile = context_profile(raw_input, constraints)
+    design_dna = _direction_design_dna(prior_resolutions)
     context_values = {
         "urban_watchful": {
             "hair_style_family": "asymmetric long layers",
@@ -414,6 +554,31 @@ def _visual_sheet(constraints: Mapping[str, Any], *, original_input: str | None 
         "pose_family": "OPEN_PARALLEL_STANCE",
     }
     values.update(context_values)
+    if design_dna:
+        values["footwear_family"] = design_dna.get("footwear_category", values["footwear_family"])
+    is_succubus_request = any(token in raw_input.lower() for token in ("魅魔", "succubus", "demoness"))
+    if design_dna and is_succubus_request:
+        values.update(
+            {
+                "hair_style_family": design_dna.get("hair_structure", values["hair_style_family"]),
+                "outfit_direction": design_dna.get("costume_topology", values["outfit_direction"]),
+                "dominant_palette": design_dna.get("palette_family", values["dominant_palette"]),
+                "background_direction": design_dna.get("background_family", values["background_direction"]),
+                "footwear_family": design_dna.get("footwear_category", values["footwear_family"]),
+                "legwear_family": design_dna.get("legwear_strategy", values["legwear_family"]),
+                "exposure_strategy": design_dna.get("exposure_strategy", values["exposure_strategy"]),
+                "pose_family": design_dna.get("pose_family", values["pose_family"]),
+            }
+        )
+        pose_intents = {
+            "OPEN_PARALLEL_STANCE": "STABLE_OPEN",
+            "NARROW_SEPARATED_STANCE": "NARROW_STANCE",
+            "FORWARD_STEP_NON_CROSSING": "ONE_FOOT_FORWARD",
+            "LOW_ENERGY_SEPARATED_STANCE": "LOW_ENERGY",
+        }
+        values["pose_intent"] = pose_intents.get(str(values["pose_family"]), values["pose_intent"])
+        if design_dna.get("horn_topology") and "none" not in str(design_dna["horn_topology"]).lower():
+            values["nonhuman_trait_level"] = "integrated horn anatomy"
     if prior_resolutions:
         selected = prior_resolutions[-1].get("direction", {})
         if isinstance(selected, Mapping):
@@ -527,6 +692,7 @@ def _visual_sheet(constraints: Mapping[str, Any], *, original_input: str | None 
         )
     return {
         "schema_version": "1.0.0",
+        **firewall.to_dict(),
         "regional_visual_language": DEFAULT_REGIONAL_VISUAL_LANGUAGE,
         "regional_visual_language_source": "default_style_policy",
         "explicit_user_request": bool(set(constraints) - {"raw"}),
@@ -540,6 +706,7 @@ def _visual_sheet(constraints: Mapping[str, Any], *, original_input: str | None 
         "user_controlled_variables": list(user_fields),
         "lower_body_visual_variables": {name: values[name] for name in ("exposure_strategy", "legwear_family", "leg_accessory_family", "footwear_family", "foot_visibility", "visual_reason", "relationship_to_character_style", "relationship_to_pose", "repetition_risk")},
         "pose_intent": values["pose_intent"],
+        "design_dna": deepcopy(design_dna),
     }
 
 
@@ -550,17 +717,27 @@ def _directions(
     kind: str,
     explicit_constraints: Mapping[str, Any] | None = None,
     prior_resolutions: Sequence[Mapping[str, Any]] = (),
+    visual_context_firewall: VisualContextFirewall | Mapping[str, Any] | None = None,
     revision: int = 0,
+    seed: Any = None,
 ) -> list[dict[str, Any]]:
-    count = 2 if depth == "low" else 4
+    firewall = VisualContextFirewall.from_metadata(visual_context_firewall)
+    # QUICK samples one path from the same small legal pool; it does not render all four.
+    count = 4
     gate_id = GateType.ART_DIRECTION_GATE.value if kind == "art" else GateType.CHARACTER_DIRECTION_GATE.value
     generated = CandidateGenerator().generate(
         gate_id=gate_id,
         original_input=text,
         explicit_constraints=explicit_constraints,
         prior_resolutions=prior_resolutions,
+        generation_context=firewall.generation_context(
+            current_user_request=text,
+            current_run_choices=prior_resolutions,
+            confirmed_gate_outputs=prior_resolutions,
+        ),
         style_policy="CONTEMPORARY_COMMERCIAL_GACHA_ANIME",
         revision=revision,
+        seed=seed,
     )
     return generated[:count]
 
@@ -589,12 +766,50 @@ class QuickGateResolver(GateResolver):
     def resolve(self, session: CreativeInteractionSession, gate_type: str | GateType, event: InteractionEvent | None = None, *, payload: Mapping[str, Any] | None = None) -> GateResolution:
         gate = str(_value(gate_type))
         if gate == GateType.CHARACTER_DIRECTION_GATE.value:
-            selected = session.character_explore_result[0]
-            return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "quick_ai_fill", rationale="Quick mode selected the first compliant low-depth direction.")
+            selected = select_seeded_candidate(session.character_explore_result, session.design_seed, salt="character-direction")
+            initial_index = next((index for index, item in enumerate(session.character_explore_result) if item.get("id") == selected.get("id")), 0)
+            novelty = NoveltyGuard.resolve_quick_candidates(
+                session.character_explore_result,
+                initial_index,
+                policy=NoveltyPolicy.from_mapping(session.novelty_policy),
+                history_snapshot=session.novelty_history_snapshot,
+            )
+            session.novelty_candidate_reviews.update(novelty.get("reviews", {}))
+            if novelty.get("selected") is not None:
+                selected = novelty["selected"]
+                session.novelty_resolution_attempt = max(session.novelty_resolution_attempt, int(novelty.get("attempts", 1)) - 1)
+            selected["resolution_metadata"] = {
+                "mode": "QUICK",
+                "strategy": "seeded_structured_sampling",
+                "seed": session.design_seed,
+                "candidate_pool_size": len(session.character_explore_result),
+                "selected_candidate_id": str(selected.get("id")),
+                "novelty_resolution": novelty.get("resolution", "KEEP"),
+            }
+            return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "quick_ai_fill", delegated=True, rationale="Quick mode sampled one compatible Design DNA from the replayable candidate pool.")
         if gate == GateType.ART_DIRECTION_GATE:
-            selected = session.art_explore_result[0]
-            return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "quick_ai_fill", rationale="Quick mode selected a compliant low-depth art direction.")
-        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])
+            selected = select_seeded_candidate(session.art_explore_result, session.design_seed, salt="art-direction")
+            initial_index = next((index for index, item in enumerate(session.art_explore_result) if item.get("id") == selected.get("id")), 0)
+            novelty = NoveltyGuard.resolve_quick_candidates(
+                session.art_explore_result,
+                initial_index,
+                policy=NoveltyPolicy.from_mapping(session.novelty_policy),
+                history_snapshot=session.novelty_history_snapshot,
+            )
+            session.novelty_candidate_reviews.update(novelty.get("reviews", {}))
+            if novelty.get("selected") is not None:
+                selected = novelty["selected"]
+                session.novelty_resolution_attempt = max(session.novelty_resolution_attempt, int(novelty.get("attempts", 1)) - 1)
+            selected["resolution_metadata"] = {
+                "mode": "QUICK",
+                "strategy": "seeded_structured_sampling",
+                "seed": session.design_seed,
+                "candidate_pool_size": len(session.art_explore_result),
+                "selected_candidate_id": str(selected.get("id")),
+                "novelty_resolution": novelty.get("resolution", "KEEP"),
+            }
+            return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "quick_ai_fill", delegated=True, rationale="Quick mode sampled one compatible structured art path from the replayable candidate pool.")
+        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session))
         for name, item in sheet["variables"].items():
             if item.get("user_selection") is None:
                 item["user_selection"] = session.explicit_user_constraints.get(name, item["recommended"])
@@ -610,12 +825,24 @@ class AIDecideGateResolver(GateResolver):
     def resolve(self, session: CreativeInteractionSession, gate_type: str | GateType, event: InteractionEvent | None = None, *, payload: Mapping[str, Any] | None = None) -> GateResolution:
         gate = str(_value(gate_type))
         if gate == GateType.CHARACTER_DIRECTION_GATE.value:
-            selected = max(session.character_explore_result, key=lambda item: item.get("score", 0))
-            return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "delegated_ai", delegated=True, rationale="Selected the strongest identity and silhouette score after full exploration.")
+            filtered = NoveltyGuard.filter_ai_candidates(
+                session.character_explore_result,
+                policy=NoveltyPolicy.from_mapping(session.novelty_policy),
+                history_snapshot=session.novelty_history_snapshot,
+            )
+            session.novelty_candidate_reviews.update(filtered["reviews"])
+            selected = select_ai_candidate(filtered["candidates"] or session.character_explore_result)
+            return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "delegated_ai", delegated=True, rationale="Generated and evaluated the full structural candidate pool before selecting the strongest coherent direction.")
         if gate == GateType.ART_DIRECTION_GATE:
-            selected = max(session.art_explore_result, key=lambda item: item.get("score", 0))
-            return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "delegated_ai", delegated=True, rationale="Selected the strongest art direction after full structural comparison.")
-        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])
+            filtered = NoveltyGuard.filter_ai_candidates(
+                session.art_explore_result,
+                policy=NoveltyPolicy.from_mapping(session.novelty_policy),
+                history_snapshot=session.novelty_history_snapshot,
+            )
+            session.novelty_candidate_reviews.update(filtered["reviews"])
+            selected = select_ai_candidate(filtered["candidates"] or session.art_explore_result)
+            return GateResolution(self._gate(session, gate), gate, ResolutionStatus.RESOLVED.value, {"direction": selected}, "delegated_ai", delegated=True, rationale="Generated and evaluated the full structural art pool before selecting the strongest coherent direction.")
+        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session))
         for name, item in sheet["variables"].items():
             if item.get("user_selection") is None:
                 item["user_selection"] = session.explicit_user_constraints.get(name, item["recommended"])
@@ -690,6 +917,9 @@ def _resolved_values(sheet: Mapping[str, Any]) -> dict[str, Any]:
     return {name: item.get("user_selection") for name, item in sheet.get("variables", {}).items() if item.get("user_selection") is not None}
 
 
+STRUCTURED_VISUAL_FIELDS = frozenset((*POSE_SPECIFICATION_FIELDS, *BACKGROUND_SPECIFICATION_FIELDS))
+
+
 def _find_option(item: Mapping[str, Any], value: Any) -> str | None:
     for option in item.get("options", []):
         if option.get("value") == value:
@@ -738,7 +968,7 @@ def _apply_visual_update(sheet: dict[str, Any], name: str, update: Any, default_
 
 def _apply_visual_event(session: CreativeInteractionSession, event: InteractionEvent) -> GateResolution:
     gate = GateType.VISUAL_PREFERENCE_GATE.value
-    sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])
+    sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session))
     action = event.action.upper()
     payload = event.payload
     if action in {InteractionAction.SELECT.value, InteractionAction.USE_RECOMMENDED.value, InteractionAction.CUSTOM.value, InteractionAction.MIX.value}:
@@ -747,6 +977,9 @@ def _apply_visual_event(session: CreativeInteractionSession, event: InteractionE
             default_source = {InteractionAction.SELECT.value: "human_select", InteractionAction.USE_RECOMMENDED.value: "human_accept_recommended", InteractionAction.CUSTOM.value: "human_custom", InteractionAction.MIX.value: "human_mix"}[action]
             for name, update in updates.items():
                 if name == "field_mix":
+                    continue
+                if name in STRUCTURED_VISUAL_FIELDS and name not in sheet.get("variables", {}):
+                    InteractionRuntime._record_constraint_update(session, name, update)
                     continue
                 _apply_visual_update(sheet, name, update, default_source)
         else:
@@ -757,6 +990,17 @@ def _apply_visual_event(session: CreativeInteractionSession, event: InteractionE
             value = payload.get("value", payload.get("custom", payload.get("text")))
             if action == InteractionAction.USE_RECOMMENDED.value and payload.get("option_id") is None and value is None:
                 value = sheet["variables"][name]["recommended"]
+            if name in STRUCTURED_VISUAL_FIELDS and name not in sheet.get("variables", {}):
+                InteractionRuntime._record_constraint_update(session, name, {"value": value, "source": "explicit_user"})
+                return GateResolution(
+                    session.current_gate or "",
+                    gate,
+                    ResolutionStatus.PARTIALLY_RESOLVED.value,
+                    {"variables": _resolved_values(sheet), "explicit_structured_fields": [name]},
+                    "human_custom",
+                    human_override=True,
+                    rationale="User supplied an explicit structured pose/background field outside the compact preference sheet.",
+                )
             _apply_visual_value(sheet, name, source=source, option_id=payload.get("option_id"), value=value, mix=payload.get("values") if action == InteractionAction.MIX.value else None)
     elif action == InteractionAction.USE_ALL_RECOMMENDED.value:
         for name, override in (payload.get("overrides") or payload.get("field_updates") or {}).items():
@@ -858,11 +1102,50 @@ class UserDecideGateResolver(GateResolver):
 class InteractionRuntime:
     """Create, persist, resume, and replay CreativeInteractionSession objects."""
 
-    def __init__(self, session_root: str | Path = "sessions") -> None:
+    def __init__(self, session_root: str | Path = "sessions", *, novelty_policy: NoveltyPolicy | Mapping[str, Any] | None = None) -> None:
         self.session_root = Path(session_root)
+        self.novelty_policy = novelty_policy if isinstance(novelty_policy, NoveltyPolicy) else NoveltyPolicy.from_mapping(novelty_policy)
 
     def _session_dir(self, session_id: str) -> Path:
         return self.session_root / session_id
+
+    def _novelty_history_path(self) -> Path:
+        return self.session_root / "novelty_history.json"
+
+    def _load_novelty_history(self) -> list[dict[str, Any]]:
+        path = self._novelty_history_path()
+        if not path.is_file():
+            return []
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        items = value.get("runs", []) if isinstance(value, Mapping) else value
+        return [deepcopy(dict(item)) for item in items if isinstance(item, Mapping)]
+
+    def _save_novelty_history(self, history: Sequence[Mapping[str, Any]]) -> None:
+        self.session_root.mkdir(parents=True, exist_ok=True)
+        path = self._novelty_history_path()
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(list(history), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(path)
+
+    def _record_novelty_history(self, session: CreativeInteractionSession) -> None:
+        if session.inherit_previous_visuals or session.novelty_status in {None, "EXEMPT", "NOVELTY_EXHAUSTED"} or not session.design_signature:
+            return
+        generation = session.generation_artifact if isinstance(session.generation_artifact, Mapping) else {}
+        record = {
+            "run_id": str(generation.get("run_id") or session.session_id),
+            "generation_id": str(generation.get("generation_id") or ""),
+            "design_signature": deepcopy(session.design_signature),
+            "created_at": str(generation.get("created_at") or session.created_at),
+            "mode": session.creation_mode,
+            "inheritance_status": "fresh",
+        }
+        history = self._load_novelty_history()
+        history = [item for item in history if item.get("run_id") != record["run_id"]]
+        history.append(record)
+        self._save_novelty_history(history)
 
     def _save(self, session: CreativeInteractionSession) -> None:
         target = self._session_dir(session.session_id)
@@ -878,12 +1161,78 @@ class InteractionRuntime:
             ("visual_preference_sheet.json", session.visual_preference_sheet),
             ("final_design.json", session.final_design),
             ("prompt_bundle.json", session.compiled_prompt),
+            ("visual_adherence_review.json", session.visual_adherence_review),
+            ("original_visual_adherence_review.json", session.original_visual_adherence_review),
+            ("design_signature.json", session.design_signature),
+            ("novelty_review.json", session.novelty_review),
+            ("novelty_history_snapshot.json", session.novelty_history_snapshot),
+            ("novelty_candidate_reviews.json", session.novelty_candidate_reviews),
         ):
             if value is None:
                 continue
             artifact_tmp = artifacts / f"{name}.tmp"
             artifact_tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             artifact_tmp.replace(artifacts / name)
+        for attempt in session.repair_attempts:
+            attempt_id = str(attempt.get("attempt_id", ""))
+            attempt_number = int(attempt.get("repair_attempt", 0) or 0)
+            if not attempt_id or not attempt_number:
+                continue
+            attempt_dir = artifacts / "repair" / f"attempt_{attempt_number:02d}"
+            attempt_dir.mkdir(parents=True, exist_ok=True)
+            for name, value in (
+                ("repair_plan.json", attempt.get("repair_plan")),
+                ("visual_adherence_review.json", attempt.get("visual_adherence_review")),
+                ("repair_result.json", attempt.get("repair_result")),
+            ):
+                if value is None:
+                    continue
+                artifact_tmp = attempt_dir / f"{name}.tmp"
+                artifact_tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                artifact_tmp.replace(attempt_dir / name)
+            prompt = attempt.get("repair_prompt")
+            prompt_text = prompt.get("prompt") if isinstance(prompt, Mapping) else prompt
+            if prompt_text:
+                prompt_tmp = attempt_dir / "repair_prompt.txt.tmp"
+                prompt_tmp.write_text(str(prompt_text), encoding="utf-8")
+                prompt_tmp.replace(attempt_dir / "repair_prompt.txt")
+            if attempt.get("generation") is not None:
+                artifact_tmp = attempt_dir / "generation.json.tmp"
+                artifact_tmp.write_text(json.dumps(attempt["generation"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                artifact_tmp.replace(attempt_dir / "generation.json")
+        generation = session.generation_artifact
+        if isinstance(generation, Mapping):
+            original_dir = artifacts / "generation" / "original"
+            original_dir.mkdir(parents=True, exist_ok=True)
+
+            def write_generation_json(name: str, value: Any) -> None:
+                artifact_tmp = original_dir / f"{name}.tmp"
+                artifact_tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                artifact_tmp.replace(original_dir / name)
+
+            write_generation_json("generation.json", generation)
+            prompt_bundle = session.compiled_prompt or {}
+            prompt_text = prompt_bundle.get("prompt") if isinstance(prompt_bundle, Mapping) else None
+            if prompt_text:
+                prompt_tmp = original_dir / "prompt.txt.tmp"
+                prompt_tmp.write_text(str(prompt_text), encoding="utf-8")
+                prompt_tmp.replace(original_dir / "prompt.txt")
+                write_generation_json("prompt_bundle.json", prompt_bundle)
+            manifest = prompt_bundle.get("prompt_adherence_manifest") if isinstance(prompt_bundle, Mapping) else None
+            contract = prompt_bundle.get("visual_specification_contract") if isinstance(prompt_bundle, Mapping) else None
+            if isinstance(manifest, Mapping):
+                write_generation_json("prompt_adherence_manifest.json", manifest)
+            if isinstance(contract, Mapping):
+                write_generation_json("visual_specification_contract.json", contract)
+            write_generation_json("image_metadata.json", {
+                "generation_id": generation.get("generation_id"),
+                "run_id": generation.get("run_id"),
+                "image_path": generation.get("image_path"),
+                "image_hash": generation.get("image_hash"),
+                "created_at": generation.get("created_at"),
+            })
+            if session.original_visual_adherence_review is not None:
+                write_generation_json("visual_adherence_review.json", session.original_visual_adherence_review)
 
     def _append_event(self, event: InteractionEvent) -> None:
         target = self._session_dir(event.session_id)
@@ -901,8 +1250,23 @@ class InteractionRuntime:
             return migrate_legacy_artifact(json.loads(legacy.read_text(encoding="utf-8")), session_id=session_id)
         raise FileNotFoundError(f"session not found: {session_id}")
 
-    def create_session(self, user_input: str, mode: str | CreationMode | None = None, *, session_id: str | None = None) -> InteractiveResponse:
-        session = CreativeInteractionSession(uuid4().hex if session_id is None else session_id, detect_creation_mode(user_input, mode), user_input, explicit_user_constraints=_extract_constraints(user_input))
+    def create_session(self, user_input: str, mode: str | CreationMode | None = None, *, session_id: str | None = None, seed: Any = None) -> InteractiveResponse:
+        constraints = _extract_constraints(user_input)
+        firewall = VisualContextFirewall.from_request(user_input, constraints)
+        resolved_session_id = uuid4().hex if session_id is None else session_id
+        session = CreativeInteractionSession(
+            resolved_session_id,
+            detect_creation_mode(user_input, mode),
+            user_input,
+            explicit_user_constraints=constraints,
+            inherit_previous_visuals=firewall.inherit_previous_visuals,
+            allowed_visual_inheritance=list(firewall.allowed_visual_inheritance),
+            blocked_context_sources=list(firewall.blocked_context_sources),
+            visual_context_firewall_applied=firewall.visual_context_firewall_applied,
+            design_seed=stable_session_seed(resolved_session_id) if seed is None else int(seed),
+            artifact_continuity=ARTIFACT_CONTINUITY_PENDING,
+            novelty_policy=self.novelty_policy.to_dict(),
+        )
         self._save(session)
         response = self._advance(session)
         self._save(session)
@@ -925,6 +1289,8 @@ class InteractionRuntime:
                 return self._error_response(session, "INVALID_INTERACTION", event.payload.get("clarification_reason") or "这句话还不能安全映射到当前步骤。")
             if action == "AMBIGUOUS":
                 return self._error_response(session, "AMBIGUOUS_INTERACTION", event.payload.get("clarification_reason") or "请做一个最小选择。")
+            if action != "QUESTION_ONLY":
+                self._apply_visual_inheritance_request(session, event.payload.get("raw_text") or event.payload.get("text", ""))
             if action == "QUESTION_ONLY":
                 response = self._question_response(session, event.payload.get("question") or event.payload.get("raw_text", ""))
             elif action == "CANCEL":
@@ -1018,6 +1384,21 @@ class InteractionRuntime:
             fields_list.append(name)
         session.audit_log.append({"event": "constraint_update", "field": name, "value": value, "source": "explicit_user", "pending": True})
 
+    def _apply_visual_inheritance_request(self, session: CreativeInteractionSession, text: Any) -> None:
+        if not str(text).strip():
+            return
+        constraints = _extract_constraints(str(text))
+        firewall = VisualContextFirewall.from_request(str(text), constraints)
+        if not firewall.inherit_previous_visuals:
+            return
+        session.inherit_previous_visuals = True
+        session.allowed_visual_inheritance = list(firewall.allowed_visual_inheritance)
+        session.blocked_context_sources = list(firewall.blocked_context_sources)
+        session.visual_context_firewall_applied = True
+        if session.visual_preference_sheet is not None:
+            session.visual_preference_sheet.update(firewall.to_dict())
+        session.audit_log.append({"event": "visual_context_firewall", **firewall.to_dict(), "source": "explicit_user_request"})
+
     def _regenerate_options(self, session: CreativeInteractionSession, event: InteractionEvent) -> InteractiveResponse:
         gate_type = session.gate_payload.get("gate_type")
         count_key = "character_explore" if gate_type == GateType.CHARACTER_DIRECTION_GATE.value else "art_explore" if gate_type == GateType.ART_DIRECTION_GATE.value else None
@@ -1034,7 +1415,9 @@ class InteractionRuntime:
             kind=kind,
             explicit_constraints=session.explicit_user_constraints,
             prior_resolutions=([{"direction": session.selected_character_direction}] if count_key == "art_explore" and session.selected_character_direction else ()),
+            visual_context_firewall=_session_firewall(session),
             revision=count,
+            seed=session.design_seed,
         )
         session.candidate_history.setdefault(count_key, []).append({"revision": count - 1, "options": deepcopy(previous), "reason": event.payload.get("raw_text", "user requested another set")})
         session.candidate_revisions[count_key] = count
@@ -1050,13 +1433,490 @@ class InteractionRuntime:
         session.audit_log.append({"event": "regenerate_options", "gate_type": gate_type, "reason": event.payload.get("raw_text", "user requested another set"), "previous_option_ids": [item.get("id") for item in previous], "new_option_ids": [item.get("id") for item in generated], "user_requested": True})
         return self._response(session, message="已换一批当前阶段的方向；之前的方案保留在历史里。")
 
+    @staticmethod
+    def _clear_novelty(session: CreativeInteractionSession) -> None:
+        session.design_signature = None
+        session.novelty_review = None
+        session.novelty_history_snapshot = None
+        session.novelty_candidate_reviews = {}
+        session.novelty_resolution_attempt = 0
+        session.novelty_status = None
+        session.human_override_novelty = False
+
+    def _novelty_alternative(self, session: CreativeInteractionSession) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None:
+        """Try one deterministic existing candidate without exposing history to design."""
+        pools: list[tuple[str, list[dict[str, Any]], dict[str, Any] | None]] = [
+            ("character", session.character_explore_result, session.selected_character_direction),
+            ("art", session.art_explore_result, session.selected_art_direction),
+        ]
+        alternatives: list[tuple[str, dict[str, Any]]] = []
+        for name, pool, selected in pools:
+            current_id = str((selected or {}).get("id", ""))
+            indices = [index for index, item in enumerate(pool) if str(item.get("id", "")) != current_id]
+            if session.creation_mode == CreationMode.QUICK.value and selected:
+                current_index = next((index for index, item in enumerate(pool) if str(item.get("id", "")) == current_id), -1)
+                indices = list(range(current_index + 1, len(pool))) + list(range(0, max(0, current_index)))
+            else:
+                indices.sort(key=lambda index: (pool[index].get("score", 0), pool[index].get("recommendation_score", 0), -index), reverse=True)
+            alternatives.extend((name, pool[index]) for index in indices)
+        snapshot = session.novelty_history_snapshot or []
+        remaining_attempts = max(0, self.novelty_policy.max_resolution_attempts - 1 - session.novelty_resolution_attempt)
+        for offset, (name, candidate) in enumerate(alternatives[:remaining_attempts], start=1):
+            attempt = session.novelty_resolution_attempt + offset
+            probe = deepcopy(session)
+            if name == "character":
+                probe.selected_character_direction = deepcopy(candidate)
+            else:
+                probe.selected_art_direction = deepcopy(candidate)
+            design = _build_final_design(probe)
+            review = NoveltyGuard.evaluate(
+                DesignSignature.from_final_design(design),
+                policy=self.novelty_policy,
+                history_snapshot=snapshot,
+                resolution_attempt=attempt,
+            )
+            if review.novelty_result != "FAIL":
+                return name, deepcopy(candidate), {"design": design, "review": review.to_dict()}
+        return None
+
+    def _evaluate_novelty(self, session: CreativeInteractionSession) -> bool:
+        if session.novelty_history_snapshot is None:
+            session.novelty_history_snapshot = NoveltyGuard.snapshot_history(self._load_novelty_history(), self.novelty_policy)
+        signature = DesignSignature.from_final_design(session.final_design or {})
+        review = NoveltyGuard.evaluate(
+            signature,
+            policy=self.novelty_policy,
+            inherit_previous_visuals=session.inherit_previous_visuals,
+            allowed_visual_inheritance=session.allowed_visual_inheritance,
+            history_snapshot=session.novelty_history_snapshot,
+            resolution_attempt=session.novelty_resolution_attempt,
+        )
+        if review.novelty_result == "FAIL" and session.creation_mode in {CreationMode.QUICK.value, CreationMode.AI_DECIDE.value}:
+            alternative = self._novelty_alternative(session)
+            if alternative is not None:
+                name, candidate, resolved = alternative
+                if name == "character":
+                    session.selected_character_direction = candidate
+                    session.locked_fields["character_direction"] = deepcopy(candidate)
+                else:
+                    session.selected_art_direction = candidate
+                    session.locked_fields["art_direction"] = deepcopy(candidate)
+                session.novelty_resolution_attempt += 1
+                session.final_design = resolved["design"]
+                signature = DesignSignature.from_final_design(session.final_design)
+                review = NoveltyGuard.evaluate(
+                    signature,
+                    policy=self.novelty_policy,
+                    history_snapshot=session.novelty_history_snapshot,
+                    resolution_attempt=session.novelty_resolution_attempt,
+                )
+                session.audit_log.append({"event": "novelty_resolution", "resolution": "DETERMINISTIC_ALTERNATE", "candidate_id": candidate.get("id"), "source": name, "attempt": session.novelty_resolution_attempt})
+        if review.novelty_result == "FAIL" and session.creation_mode == CreationMode.USER_DECIDE.value:
+            user_result = NoveltyGuard.evaluate_user_candidate(
+                session.final_design or {},
+                policy=self.novelty_policy,
+                history_snapshot=session.novelty_history_snapshot,
+                explicit_fields=session.explicit_user_constraints.get("explicit_user_fields", ()),
+                delegated_fields=session.delegated_fields,
+            )
+            session.human_override_novelty = bool(user_result["human_override_novelty"] or session.selected_character_direction or session.selected_art_direction)
+            if user_result["delegated_reresolution_allowed"]:
+                session.audit_log.append({"event": "novelty_delegated_reresolution_available", "matching_fields": user_result["delegated_matching_fields"]})
+        session.design_signature = signature.to_dict()
+        session.novelty_review = review.to_dict()
+        session.novelty_status = review.novelty_result
+        if session.final_design is not None:
+            session.final_design["design_signature"] = deepcopy(session.design_signature)
+            session.final_design["novelty_review"] = deepcopy(session.novelty_review)
+            session.final_design["human_override_novelty"] = session.human_override_novelty
+        session.audit_log.append({"event": "novelty_evaluated", "result": review.novelty_result, "nearest_prior_run": review.nearest_prior_run, "structural_similarity": review.structural_similarity, "overall_similarity": review.overall_similarity, "resolution_attempt": session.novelty_resolution_attempt})
+        if review.novelty_result == "FAIL" and session.creation_mode in {CreationMode.QUICK.value, CreationMode.AI_DECIDE.value}:
+            session.novelty_status = "NOVELTY_EXHAUSTED"
+            session.artifact_status["novelty"] = "blocked"
+            session.status = SessionStatus.BLOCKED.value
+            return False
+        session.artifact_status["novelty"] = review.novelty_result.lower()
+        return True
+
     def replay_session(self, session_id: str) -> dict[str, Any]:
         session = self.load_session(session_id)
         events_path = self._session_dir(session_id) / "events.jsonl"
         events = []
         if events_path.is_file():
             events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-        return {"session_id": session_id, "events": events, "audit_log": deepcopy(session.audit_log), "interaction_history": deepcopy(session.interaction_history)}
+        return {
+            "session_id": session_id,
+            "events": events,
+            "audit_log": deepcopy(session.audit_log),
+            "interaction_history": deepcopy(session.interaction_history),
+            "generation_artifact": deepcopy(session.generation_artifact),
+            "artifact_continuity": session.artifact_continuity,
+            "design_signature": deepcopy(session.design_signature),
+            "novelty_review": deepcopy(session.novelty_review),
+            "novelty_history_snapshot": deepcopy(session.novelty_history_snapshot),
+            "novelty_candidate_reviews": deepcopy(session.novelty_candidate_reviews),
+            "novelty_policy": deepcopy(session.novelty_policy),
+            "novelty_resolution_attempt": session.novelty_resolution_attempt,
+            "novelty_status": session.novelty_status,
+            "human_override_novelty": session.human_override_novelty,
+            "visual_adherence_review": deepcopy(session.visual_adherence_review),
+            "original_image": session.original_image,
+            "original_visual_adherence_review": deepcopy(session.original_visual_adherence_review),
+            "repair_attempts": deepcopy(session.repair_attempts),
+            "best_artifact": deepcopy(session.best_artifact),
+            "repair_status": session.repair_status,
+        }
+
+    def record_generation_artifact(
+        self,
+        session_id: str,
+        image: str | Path,
+        *,
+        run_id: str | None = None,
+        generation_id: str | None = None,
+        prompt_hash: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist the externally generated original image and its exact inputs."""
+        image_path = Path(image)
+        if not image_path.is_file():
+            raise VisualRepairError("generation artifact must provide an existing image")
+        session = self.load_session(session_id)
+        if session.current_stage != PipelineStage.GENERATION_READY.value:
+            raise VisualRepairError("generation artifact requires GENERATION_READY")
+        prompt_bundle = session.compiled_prompt or {}
+        manifest = prompt_bundle.get("prompt_adherence_manifest") if isinstance(prompt_bundle, Mapping) else None
+        contract = prompt_bundle.get("visual_specification_contract") if isinstance(prompt_bundle, Mapping) else None
+        prompt = prompt_bundle.get("prompt") if isinstance(prompt_bundle, Mapping) else None
+        if not isinstance(prompt, str) or not prompt.strip() or not isinstance(manifest, Mapping) or not isinstance(contract, Mapping):
+            raise VisualRepairError("generation artifact requires the current PromptBundle, manifest, and contract")
+        if session.design_signature is None or session.novelty_review is None:
+            if not self._evaluate_novelty(session):
+                raise VisualRepairError("NOVELTY_EXHAUSTED")
+        computed_prompt_hash = sha256(prompt.encode("utf-8")).hexdigest()
+        if prompt_hash is not None and prompt_hash != computed_prompt_hash:
+            raise VisualRepairError("generation prompt hash does not match the persisted PromptBundle")
+        image_hash = sha256(image_path.read_bytes()).hexdigest()
+        resolved_run_id = str(run_id or session_id)
+        resolved_generation_id = str(generation_id or f"{resolved_run_id}:original")
+        existing = session.generation_artifact
+        if isinstance(existing, Mapping):
+            if all(
+                existing.get(name) == value
+                for name, value in {
+                    "generation_id": resolved_generation_id,
+                    "image_hash": image_hash,
+                    "prompt_hash": computed_prompt_hash,
+                }.items()
+            ):
+                self._record_novelty_history(session)
+                return deepcopy(dict(existing))
+            raise VisualRepairError("GENERATION_ARTIFACT_MISMATCH")
+        artifact = GenerationArtifact(
+            generation_id=resolved_generation_id,
+            run_id=resolved_run_id,
+            image_path=str(image_path),
+            image_hash=image_hash,
+            prompt_hash=computed_prompt_hash,
+            prompt_bundle_ref="artifacts/generation/original/prompt_bundle.json",
+            manifest_ref="artifacts/generation/original/prompt_adherence_manifest.json",
+            contract_ref="artifacts/generation/original/visual_specification_contract.json",
+            mode=session.creation_mode,
+            design_seed=session.design_seed,
+            created_at=_now(),
+        )
+        session.generation_artifact = artifact.to_dict()
+        session.artifact_continuity = ARTIFACT_CONTINUITY_COMPLETE
+        session.artifact_status["generation"] = "complete"
+        self._record_novelty_history(session)
+        session.audit_log.append({"event": "generation_artifact_recorded", **artifact.to_dict()})
+        self._save(session)
+        return artifact.to_dict()
+
+    def _legacy_generation_artifact(self, session: CreativeInteractionSession, image: str | Path) -> dict[str, Any]:
+        image_path = Path(image)
+        prompt = str((session.compiled_prompt or {}).get("prompt", ""))
+        return {
+            "generation_id": f"legacy:{session.session_id}:original",
+            "run_id": session.session_id,
+            "image_path": str(image_path),
+            "image_hash": sha256(image_path.read_bytes()).hexdigest(),
+            "prompt_hash": sha256(prompt.encode("utf-8")).hexdigest() if prompt else "",
+            "prompt_bundle_ref": "",
+            "manifest_ref": "",
+            "contract_ref": "",
+            "mode": session.creation_mode,
+            "design_seed": session.design_seed,
+            "created_at": session.created_at,
+        }
+
+    @staticmethod
+    def _strict_generation_artifact(session: CreativeInteractionSession) -> Mapping[str, Any]:
+        artifact = session.generation_artifact
+        if session.artifact_continuity != ARTIFACT_CONTINUITY_COMPLETE or not isinstance(artifact, Mapping):
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: strict generation artifact is required")
+        required = ("generation_id", "image_path", "image_hash", "prompt_hash")
+        if any(not artifact.get(name) for name in required):
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: incomplete generation artifact")
+        return artifact
+
+    @staticmethod
+    def _validate_repair_source(review: Mapping[str, Any], artifact: Mapping[str, Any]) -> None:
+        image_path = Path(str(review.get("actual_image", "")))
+        if not image_path.is_file():
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: image is missing")
+        image_hash = sha256(image_path.read_bytes()).hexdigest()
+        if artifact.get("image_hash") != image_hash or (review.get("actual_image_hash") and review.get("actual_image_hash") != artifact.get("image_hash")):
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: image hash")
+        if artifact.get("prompt_hash") != review.get("prompt_hash"):
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: prompt hash")
+        if artifact.get("generation_id") != review.get("generation_id"):
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: generation id")
+
+    def _review_generation_artifact(self, session: CreativeInteractionSession, actual_image: str | Path) -> Mapping[str, Any]:
+        image_path = Path(actual_image)
+        if not image_path.is_file():
+            raise VisualRepairError("generation review must provide an existing image")
+        artifact = session.generation_artifact
+        if not isinstance(artifact, Mapping):
+            if session.artifact_continuity != ARTIFACT_CONTINUITY_LEGACY:
+                raise VisualRepairError("GENERATION_ARTIFACT_REQUIRED")
+            artifact = self._legacy_generation_artifact(session, image_path)
+            session.generation_artifact = dict(artifact)
+        actual_hash = sha256(image_path.read_bytes()).hexdigest()
+        if artifact.get("image_hash") != actual_hash:
+            raise VisualRepairError("REVIEW_SOURCE_MISMATCH: image hash")
+        prompt = str((session.compiled_prompt or {}).get("prompt", ""))
+        expected_prompt_hash = sha256(prompt.encode("utf-8")).hexdigest()
+        if artifact.get("prompt_hash") != expected_prompt_hash:
+            raise VisualRepairError("REVIEW_SOURCE_MISMATCH: prompt hash")
+        return artifact
+
+    def record_visual_adherence_review(
+        self,
+        session_id: str,
+        actual_image: str | Path,
+        *,
+        observations: Mapping[str, Any],
+        prompt_hash: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist one post-generation actual-image review for replay."""
+        session = self.load_session(session_id)
+        artifact = self._review_generation_artifact(session, actual_image)
+        if prompt_hash is not None and prompt_hash != artifact.get("prompt_hash"):
+            raise VisualRepairError("REVIEW_SOURCE_MISMATCH: prompt hash")
+        final_design = session.final_design or {}
+        prompt_bundle = session.compiled_prompt or {}
+        manifest = prompt_bundle.get("prompt_adherence_manifest") or final_design.get("prompt_adherence_manifest")
+        if not isinstance(manifest, Mapping):
+            raise ValueError("VisualAdherenceCritic requires a PromptAdherenceManifest")
+        review = VisualAdherenceCritic().review(
+            actual_image,
+            manifest=manifest,
+            observations=observations,
+            visual_specification_contract=prompt_bundle.get("visual_specification_contract") or final_design.get("visual_specification_contract"),
+            final_design=final_design,
+            prompt_bundle_metadata=prompt_bundle,
+            prompt_hash=prompt_hash,
+            generation_id=str(artifact.get("generation_id")),
+        )
+        session.visual_adherence_review = review.to_dict()
+        if session.original_visual_adherence_review is None:
+            session.original_image = str(actual_image)
+            session.original_visual_adherence_review = review.to_dict()
+            session.best_artifact = initial_best_artifact(review, actual_image, generation_artifact=artifact)
+        session.repair_status = "ACCEPTED" if review.overall_result == "PASS" else "ADHERENCE_REVIEWED"
+        session.artifact_status["visual_adherence_review"] = "fresh"
+        session.audit_log.append(
+            {
+                "event": "visual_adherence_review",
+                "actual_image": str(actual_image),
+                "overall_result": review.overall_result,
+                "failure_types": list(review.failure_types),
+            }
+        )
+        self._save(session)
+        return review.to_dict()
+
+    def build_visual_repair_plan(
+        self,
+        session_id: str,
+        *,
+        max_attempts: int = MAX_REPAIR_ATTEMPTS,
+        include_minor: bool = True,
+    ) -> dict[str, Any]:
+        """Prepare one idempotent repair attempt; ImageGen remains external."""
+        session = self.load_session(session_id)
+        generation_artifact = self._strict_generation_artifact(session)
+        review_data = session.visual_adherence_review
+        if not isinstance(review_data, Mapping):
+            raise VisualRepairError("a current VisualAdherenceReview is required before repair planning")
+        self._validate_repair_source(review_data, generation_artifact)
+        for attempt in reversed(session.repair_attempts):
+            if attempt.get("repair_result", {}).get("status") in {"PENDING_GENERATION", "PENDING_REVIEW"}:
+                return {"status": session.repair_status or "REPAIR_GENERATED", **deepcopy(attempt)}
+        if not session.repair_attempts and str(review_data.get("overall_result")) == "PASS":
+            session.repair_status = "ACCEPTED"
+            self._save(session)
+            return {"status": "ACCEPTED", "repair_plan": None, "repair_prompt": None}
+        attempt_number = len(session.repair_attempts) + 1
+        if attempt_number > max_attempts:
+            session.repair_status = "REPAIR_EXHAUSTED"
+            self._save(session)
+            return {"status": "REPAIR_EXHAUSTED", "repair_plan": None, "repair_prompt": None}
+        prompt_bundle = session.compiled_prompt or {}
+        manifest = prompt_bundle.get("prompt_adherence_manifest") or (session.final_design or {}).get("prompt_adherence_manifest")
+        contract = prompt_bundle.get("visual_specification_contract") or (session.final_design or {}).get("visual_specification_contract")
+        plan = build_repair_plan(
+            review_data,
+            manifest=manifest if isinstance(manifest, Mapping) else None,
+            visual_specification_contract=contract if isinstance(contract, Mapping) else None,
+            explicit_hard_fields=tuple((contract or {}).get("explicit_hard_fields", ())) if isinstance(contract, Mapping) else (),
+            repair_attempt=attempt_number,
+            max_attempts=max_attempts,
+            include_minor=include_minor,
+            generation_artifact=generation_artifact,
+        )
+        if not plan.repair_targets:
+            session.repair_status = "ACCEPTED" if not review_data.get("repair_targets") else "ADHERENCE_REVIEWED"
+            self._save(session)
+            return {"status": session.repair_status, "repair_plan": plan.to_dict(), "repair_prompt": None}
+        repair_prompt = compile_repair_prompt(prompt_bundle, plan)
+        attempt = {
+            "attempt_id": plan.attempt_id,
+            "repair_attempt": plan.repair_attempt,
+            "repair_plan": plan.to_dict(),
+            "repair_prompt": repair_prompt.to_dict(),
+            "before_review": deepcopy(dict(review_data)),
+            "repair_result": {"status": "PENDING_GENERATION", "attempt_id": plan.attempt_id},
+            "source_generation_id": plan.source_generation_id,
+        }
+        session.repair_attempts.append(attempt)
+        session.repair_status = "REPAIR_PLANNED"
+        session.audit_log.append({"event": "visual_repair_planned", "attempt_id": plan.attempt_id, "repair_targets": [item.get("field") for item in plan.repair_targets]})
+        self._save(session)
+        return {"status": "REPAIR_PLANNED", **deepcopy(attempt)}
+
+    def record_visual_repair_generation(
+        self,
+        session_id: str,
+        attempt_id: str,
+        repair_image: str | Path,
+        *,
+        repair_prompt: str | None = None,
+        prompt_hash: str | None = None,
+    ) -> dict[str, Any]:
+        """Record an externally generated repair image without generating it."""
+        image = Path(repair_image)
+        if not image.is_file():
+            raise VisualRepairError("repair generation must provide an existing image")
+        session = self.load_session(session_id)
+        source_artifact = self._strict_generation_artifact(session)
+        attempt = next((item for item in session.repair_attempts if item.get("attempt_id") == attempt_id), None)
+        if attempt is None:
+            raise VisualRepairError(f"unknown repair attempt: {attempt_id}")
+        existing = attempt.get("generation")
+        if isinstance(existing, Mapping):
+            return {"status": "REPAIR_GENERATED", **deepcopy(dict(existing))}
+        stored_prompt = (attempt.get("repair_prompt") or {}).get("prompt")
+        if repair_prompt is not None and str(repair_prompt) != str(stored_prompt):
+            raise VisualRepairError("repair_prompt must equal the persisted RepairPromptBundle prompt")
+        if not stored_prompt:
+            raise VisualRepairError("repair attempt has no compiled repair prompt")
+        computed_hash = sha256(str(stored_prompt).encode("utf-8")).hexdigest()
+        if prompt_hash is not None and prompt_hash != computed_hash:
+            raise VisualRepairError("repair prompt hash does not match the persisted prompt")
+        plan = VisualRepairPlan.from_dict(attempt["repair_plan"])
+        if plan.source_generation_id != source_artifact.get("generation_id"):
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: generation id")
+        generation = {
+            "generation_id": f"{source_artifact['generation_id']}:repair:{plan.repair_attempt}",
+            "source_generation_id": source_artifact["generation_id"],
+            "image": str(image),
+            "image_path": str(image),
+            "image_hash": sha256(image.read_bytes()).hexdigest(),
+            "prompt_hash": computed_hash,
+            "attempt_id": attempt_id,
+        }
+        attempt["generation"] = generation
+        attempt["repair_result"] = {"status": "PENDING_REVIEW", "attempt_id": attempt_id, "repair_attempt": attempt.get("repair_attempt"), "repair_image": str(image), "image_hash": generation["image_hash"], "prompt_hash": computed_hash, "source_generation_id": source_artifact["generation_id"]}
+        session.repair_status = "REPAIR_GENERATED"
+        session.audit_log.append({"event": "visual_repair_generated", **generation})
+        self._save(session)
+        return {"status": "REPAIR_GENERATED", **deepcopy(generation)}
+
+    def record_visual_repair_review(
+        self,
+        session_id: str,
+        attempt_id: str,
+        *,
+        observations: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Critic-review one repair image and persist comparison/best artifact."""
+        session = self.load_session(session_id)
+        source_artifact = self._strict_generation_artifact(session)
+        attempt = next((item for item in session.repair_attempts if item.get("attempt_id") == attempt_id), None)
+        if attempt is None:
+            raise VisualRepairError(f"unknown repair attempt: {attempt_id}")
+        stored_result = attempt.get("repair_result")
+        if isinstance(stored_result, Mapping) and stored_result.get("outcome"):
+            return deepcopy(dict(stored_result))
+        generation = attempt.get("generation")
+        if not isinstance(generation, Mapping):
+            raise VisualRepairError("repair review requires a recorded repair generation")
+        if generation.get("source_generation_id") != source_artifact.get("generation_id"):
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: generation id")
+        if not Path(str(generation.get("image_path", generation.get("image", "")))).is_file():
+            raise VisualRepairError("repair generation image is missing")
+        if generation.get("image_hash") != sha256(Path(str(generation.get("image_path", generation.get("image")))).read_bytes()).hexdigest():
+            raise VisualRepairError("REPAIR_SOURCE_MISMATCH: image hash")
+        before = VisualAdherenceReview.from_dict(attempt["before_review"])
+        plan = VisualRepairPlan.from_dict(attempt["repair_plan"])
+        prompt_bundle = session.compiled_prompt or {}
+        manifest = prompt_bundle.get("prompt_adherence_manifest") or (session.final_design or {}).get("prompt_adherence_manifest")
+        if not isinstance(manifest, Mapping):
+            raise VisualRepairError("VisualAdherenceCritic requires a PromptAdherenceManifest")
+        after = VisualAdherenceCritic().review(
+            generation["image"],
+            manifest=manifest,
+            observations=observations,
+            visual_specification_contract=prompt_bundle.get("visual_specification_contract") or (session.final_design or {}).get("visual_specification_contract"),
+            final_design=session.final_design or {},
+            prompt_bundle_metadata={**prompt_bundle, "prompt": attempt["repair_prompt"]["prompt"]},
+            prompt_hash=generation.get("prompt_hash"),
+            generation_id=str(generation.get("generation_id")),
+        )
+        comparison = evaluate_repair_attempt(before, after, plan)
+        candidate = {
+            "image": generation["image"],
+            "image_path": generation.get("image_path", generation["image"]),
+            "image_hash": generation.get("image_hash"),
+            "prompt_hash": generation.get("prompt_hash"),
+            "review_id": after.review_id,
+            "generation_id": generation.get("generation_id"),
+            "source_type": "repair",
+            "attempt_id": attempt_id,
+            "overall_result": after.overall_result,
+        }
+        explicit = tuple(
+            (prompt_bundle.get("visual_specification_contract") or {}).get("explicit_hard_fields", ())
+            if isinstance(prompt_bundle.get("visual_specification_contract"), Mapping)
+            else ()
+        )
+        current_best = session.best_artifact or initial_best_artifact(before, before.actual_image, generation_artifact=source_artifact)
+        best = select_best_artifact(current_best, candidate, before, after, explicit_fields=explicit, outcome=comparison["outcome"])
+        attempt["visual_adherence_review"] = after.to_dict()
+        attempt["repair_result"] = {**comparison, "status": "REPAIR_REVIEWED", "best_artifact": best}
+        session.visual_adherence_review = after.to_dict()
+        session.best_artifact = best
+        if comparison["outcome"] == "SUCCESS":
+            session.repair_status = "ACCEPTED"
+        elif len(session.repair_attempts) >= plan.max_attempts:
+            session.repair_status = "REPAIR_EXHAUSTED"
+        else:
+            session.repair_status = "REPAIR_REVIEWED"
+        session.audit_log.append({"event": "visual_repair_reviewed", "attempt_id": attempt_id, "outcome": comparison["outcome"], "regressions": comparison["regressions"]})
+        self._save(session)
+        return deepcopy(attempt["repair_result"])
 
     def switch_mode(self, session_id: str, to_mode: str | CreationMode, *, reason: str = "explicit user request") -> InteractiveResponse:
         session = self.load_session(session_id)
@@ -1078,7 +1938,7 @@ class InteractionRuntime:
             "current_gate": session.current_gate,
             "gate_type": session.gate_payload.get("gate_type"),
             "options": session.gate_payload.get("options", []),
-            "visual_variables": (session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])).get("variables", {}),
+            "visual_variables": (session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session))).get("variables", {}),
             "recommended": session.gate_payload.get("recommended"),
             "mode": session.creation_mode,
             "unresolved_fields": list(session.unresolved_fields),
@@ -1119,8 +1979,10 @@ class InteractionRuntime:
                 continue
             if stage == PipelineStage.CHARACTER_EXPLORE.value:
                 depth = "low" if session.creation_mode == CreationMode.QUICK.value else "full"
+                if session.novelty_history_snapshot is None:
+                    session.novelty_history_snapshot = NoveltyGuard.snapshot_history(self._load_novelty_history(), self.novelty_policy)
                 session.candidate_revisions["character_explore"] = 0
-                session.character_explore_result = _directions(session.original_user_input, depth=depth, kind="character", explicit_constraints=session.explicit_user_constraints)
+                session.character_explore_result = _directions(session.original_user_input, depth=depth, kind="character", explicit_constraints=session.explicit_user_constraints, visual_context_firewall=_session_firewall(session), seed=session.design_seed)
                 session.current_stage = PipelineStage.CHARACTER_DIRECTION_RESOLUTION.value
                 self._open_gate(session, GateType.CHARACTER_DIRECTION_GATE, session.character_explore_result)
                 resolution = resolver.resolve(session, GateType.CHARACTER_DIRECTION_GATE, pending_event)
@@ -1148,6 +2010,8 @@ class InteractionRuntime:
                     kind="art",
                     explicit_constraints=session.explicit_user_constraints,
                     prior_resolutions=([{"direction": session.selected_character_direction}] if session.selected_character_direction else ()),
+                    visual_context_firewall=_session_firewall(session),
+                    seed=session.design_seed,
                 )
                 session.current_stage = PipelineStage.ART_DIRECTION_RESOLUTION.value
                 self._open_gate(session, GateType.ART_DIRECTION_GATE, session.art_explore_result)
@@ -1168,6 +2032,7 @@ class InteractionRuntime:
                         session.explicit_user_constraints,
                         original_input=session.original_user_input,
                         prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}],
+                        visual_context_firewall=_session_firewall(session),
                     )
                 self._apply_pending_constraints_to_sheet(session)
                 self._open_gate(session, GateType.VISUAL_PREFERENCE_GATE, _visual_gate_options(session.visual_preference_sheet))
@@ -1187,6 +2052,8 @@ class InteractionRuntime:
                         return self._response(session, message="当前视觉方向未通过设计 Gate，请重新选择、CUSTOM 或 DELEGATE。")
                 session.final_design = _build_final_design(session)
                 session.artifact_status["final_design"] = "fresh"
+                if not self._evaluate_novelty(session):
+                    return self._response(session, message="当前设计与近期角色结构过度相似，NoveltyGuard 已耗尽有界替代尝试。", error_code="NOVELTY_EXHAUSTED")
                 session.current_stage = PipelineStage.PLAYABLE_CHARACTER_DESIGN_GATE.value
                 continue
             if stage == PipelineStage.PLAYABLE_CHARACTER_DESIGN_GATE.value:
@@ -1199,7 +2066,23 @@ class InteractionRuntime:
                 continue
             if stage == PipelineStage.PROMPT_COMPILATION.value:
                 session.status = SessionStatus.PROMPT_COMPILING.value
-                compiled = PromptCompiler().compile(**_compiler_args(session.final_design or {}))
+                try:
+                    compiled = PromptCompiler().compile(**_compiler_args(session.final_design or {}))
+                except PromptConstraintConflict as error:
+                    session.status = SessionStatus.BLOCKED.value
+                    session.audit_log.append(
+                        {
+                            "event": "prompt_constraint_conflict",
+                            "error_code": error.code,
+                            "conflicts": list(error.conflicts),
+                        }
+                    )
+                    session.artifact_status["compiled_prompt"] = "blocked"
+                    return self._response(
+                        session,
+                        message="Prompt 视觉规格存在冲突，未进入 GENERATION_READY。",
+                        error_code=error.code,
+                    )
                 session.compiled_prompt = compiled.to_dict()
                 session.artifact_status["compiled_prompt"] = "fresh"
                 session.current_stage = PipelineStage.GENERATION_READY.value
@@ -1293,7 +2176,7 @@ class InteractionRuntime:
         return True
 
     def _reopen_visual_gate_for_user(self, session: CreativeInteractionSession) -> None:
-        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])
+        sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session))
         for item in sheet.get("variables", {}).values():
             if item.get("selection_source") not in {"explicit_user"}:
                 item.update(user_selection=None, selection_source=None, locked=False)
@@ -1301,6 +2184,7 @@ class InteractionRuntime:
         session.final_design = None
         session.design_gate_result = None
         session.compiled_prompt = None
+        self._clear_novelty(session)
         session.artifact_status.update({"final_design": "stale", "compiled_prompt": "stale"})
         session.current_stage = PipelineStage.VISUAL_PREFERENCE_RESOLUTION.value
         session.current_gate = None
@@ -1335,7 +2219,8 @@ class InteractionRuntime:
             session.design_gate_result = None
             session.compiled_prompt = None
             session.current_stage = PipelineStage.VISUAL_PREFERENCE_RESOLUTION.value if target in {"VISUAL", "VISUAL_PREFERENCE"} else PipelineStage.ART_DIRECTION_RESOLUTION.value
-            self._open_gate(session, GateType.ART_DIRECTION_GATE if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else GateType.VISUAL_PREFERENCE_GATE, session.art_explore_result if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else _visual_gate_options(_visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}])))
+            self._open_gate(session, GateType.ART_DIRECTION_GATE if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else GateType.VISUAL_PREFERENCE_GATE, session.art_explore_result if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else _visual_gate_options(_visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session))))
+        self._clear_novelty(session)
         session.audit_log.append({"event": "rollback_event", "target": target, "invalidated_artifacts": invalidated, "preserved": ["original_user_input", "interaction_history", "previous_choices"]})
         session.artifact_status.update({name: "stale" for name in invalidated})
         return self._response(session, message="已回到上一个可恢复 Gate；旧设计保留在历史中。")
@@ -1347,7 +2232,7 @@ class InteractionRuntime:
         gate = deepcopy(session.gate_payload) if session.current_gate else None
         options = gate.get("options", []) if gate else []
         if session.current_gate and session.gate_payload.get("gate_type") == GateType.VISUAL_PREFERENCE_GATE.value:
-            options = _visual_gate_options(session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}]))
+            options = _visual_gate_options(session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session)))
         current_status = status or session.status
         return InteractiveResponse(session.session_id, session.creation_mode, current_status, session.current_stage, message or _message(session), gate, options, gate.get("recommended") if gate else None, list(session.unresolved_fields), _allowed_actions(session), _progress(session), {"session": str(self._session_dir(session.session_id) / "session.json"), "events": str(self._session_dir(session.session_id) / "events.jsonl"), "artifacts": str(self._session_dir(session.session_id) / "artifacts")}, error_code)
 
@@ -1413,20 +2298,24 @@ def _message(session: CreativeInteractionSession) -> str:
 
 def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
     visual = session.resolved_visual_preferences
+    firewall = _session_firewall(session)
     lower_body = {name: visual.get(name) for name in ("exposure_strategy", "legwear_family", "leg_accessory_family", "footwear_family", "foot_visibility", "visual_reason", "relationship_to_character_style", "relationship_to_pose", "repetition_risk")}
     direction = session.selected_art_direction or {}
     identity = session.selected_character_direction or {}
+    design_dna = deepcopy(identity.get("design_dna") or direction.get("design_dna") or {})
     design = {
         "character_identity": f"{identity.get('summary', session.original_user_input)}; anchor: {identity.get('primary_anchor', 'specific head and silhouette identity')}",
         "character_visual_style": direction.get("structure", "clean-line contemporary commercial gacha anime"),
-        "pose_description": "stable open frontal standee stance with both legs clearly separated",
+        "pose_description": f"{design_dna.get('pose_family', 'OPEN_PARALLEL_STANCE')} frontal standee stance with both legs clearly separated",
         "pose_intent": visual.get("pose_intent", "STABLE_OPEN"),
-        "pose_family": "OPEN_PARALLEL_STANCE",
+        "pose_family": design_dna.get("pose_family", visual.get("pose_family", "OPEN_PARALLEL_STANCE")),
         "regional_visual_language": DEFAULT_REGIONAL_VISUAL_LANGUAGE,
         "regional_visual_language_source": "default_style_policy",
         "lower_body": lower_body,
         "visual_preferences": visual,
+        "design_dna": design_dna,
         "provenance": {name: (session.visual_preference_sheet or {}).get("variables", {}).get(name, {}).get("selection_source", "policy_default") for name in visual},
+        **firewall.to_dict(),
     }
     for key, value in session.explicit_user_constraints.items():
         if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "positive_constraints", "negative_constraints", "prohibited", "prohibited_constraints", "constraint_provenance"}:
@@ -1437,6 +2326,35 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
     design["age_group"] = session.explicit_user_constraints.get("age_group", "adult")
     design["explicit_user_constraints"] = deepcopy(session.explicit_user_constraints)
     design["constraint_priority"] = "explicit_user > human_selection > human_accept_recommended > delegated_ai > policy_default"
+    visual_contract = build_visual_specification_contract(
+        design_dna=design_dna,
+        visual_preferences=design["visual_preferences"],
+        character_visual_style=str(design["character_visual_style"]),
+        explicit_user_fields=session.explicit_user_constraints.get("explicit_user_fields", ()),
+        soft_intent={"fanservice_level": design["visual_preferences"].get("fanservice_level")},
+    )
+    design["visual_specification_contract"] = visual_contract.to_dict()
+    design["prompt_adherence_manifest"] = visual_contract.to_dict()
+    design["pose_specification"] = deepcopy(visual_contract.pose_specification)
+    design["background_specification"] = deepcopy(visual_contract.background_specification)
+    design["generation_context"] = firewall.generation_context(
+        current_user_request=session.original_user_input,
+        current_run_choices=(
+            {"character_direction": deepcopy(identity)},
+            {"art_direction": deepcopy(direction)},
+        ),
+        confirmed_gate_outputs=(
+            {"character_direction": deepcopy(identity)},
+            {"art_direction": deepcopy(direction)},
+            {"visual_preferences": deepcopy(design["visual_preferences"])},
+        ),
+    )
+    design["generation_context"].update(
+        {
+            "visual_specification_contract": visual_contract.to_dict(),
+            "prompt_adherence_manifest": visual_contract.to_dict(),
+        }
+    )
     return design
 
 
@@ -1450,7 +2368,6 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
     identity = str(final_design.get("character_identity", "specific playable character identity"))
     visual = final_design.get("visual_preferences") or {}
     explicit = final_design.get("explicit_user_constraints") or {}
-    prompt_fields = {name: visual[name] for name in explicit.get("explicit_user_fields", []) if name in visual}
     structured = list(explicit.get("prohibited_constraints") or [])
     prompt_structured = [item for item in structured if str(item.get("text")) != "crossed legs"]
     negative = {
@@ -1458,15 +2375,30 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
         for name, value in (explicit.get("negative_constraints") or {}).items()
         if name != "forbid_crossed_legs" and not (structured and name.startswith("forbid_hair_"))
     }
-    prohibited = list(explicit.get("prohibited") or [])
-    if prompt_fields or negative or prohibited or structured:
-        explicit_prompt_constraints = {**prompt_fields, **negative}
-        if prompt_structured:
-            explicit_prompt_constraints["prohibited_constraints"] = prompt_structured
-        elif prohibited:
-            explicit_prompt_constraints["prohibited"] = prohibited
-        identity += f"; Explicit user constraints: {json.dumps(explicit_prompt_constraints, ensure_ascii=False, sort_keys=True)}"
-    return {"character_visual_style": str(final_design.get("character_visual_style", "clean-line contemporary gacha anime")), "character_identity": identity, "prohibited_constraints": structured, "regional_visual_language": final_design.get("regional_visual_language", DEFAULT_REGIONAL_VISUAL_LANGUAGE), "regional_visual_language_source": final_design.get("regional_visual_language_source", "default_style_policy"), "lower_body": final_design.get("lower_body"), "age_group": final_design.get("age_group", "adult"), "fanservice_level": visual.get("fanservice_level"), "pose_description": final_design.get("pose_description"), "pose_family": final_design.get("pose_family"), "pose_intent": final_design.get("pose_intent")}
+    contract = final_design.get("visual_specification_contract")
+    if not contract:
+        contract = build_visual_specification_contract(
+            design_dna=final_design.get("design_dna"),
+            visual_preferences=visual,
+            character_visual_style=str(final_design.get("character_visual_style", "")),
+            explicit_user_fields=explicit.get("explicit_user_fields", ()),
+        ).to_dict()
+    return {
+        "character_visual_style": str(final_design.get("character_visual_style", "clean-line contemporary gacha anime")),
+        "character_identity": identity,
+        "prohibited_constraints": prompt_structured,
+        "explicit_negative_constraints": negative,
+        "regional_visual_language": final_design.get("regional_visual_language", DEFAULT_REGIONAL_VISUAL_LANGUAGE),
+        "regional_visual_language_source": final_design.get("regional_visual_language_source", "default_style_policy"),
+        "lower_body": final_design.get("lower_body"),
+        "age_group": final_design.get("age_group", "adult"),
+        "fanservice_level": visual.get("fanservice_level"),
+        "pose_description": final_design.get("pose_description"),
+        "pose_family": final_design.get("pose_family"),
+        "pose_intent": final_design.get("pose_intent"),
+        "visual_specification_contract": contract,
+        "visual_context_firewall": {name: deepcopy(final_design.get(name)) for name in ("inherit_previous_visuals", "allowed_visual_inheritance", "blocked_context_sources", "visual_context_firewall_applied")},
+    }
 
 
 def resume_session(session_root: str | Path, session_id: str, interaction_event: InteractionEvent | Mapping[str, Any] | str) -> InteractiveResponse:
@@ -1477,10 +2409,84 @@ def replay_session(session_root: str | Path, session_id: str) -> dict[str, Any]:
     return InteractionRuntime(session_root).replay_session(session_id)
 
 
+def record_generation_artifact(
+    session_root: str | Path,
+    session_id: str,
+    image: str | Path,
+    *,
+    run_id: str | None = None,
+    generation_id: str | None = None,
+    prompt_hash: str | None = None,
+) -> dict[str, Any]:
+    return InteractionRuntime(session_root).record_generation_artifact(
+        session_id,
+        image,
+        run_id=run_id,
+        generation_id=generation_id,
+        prompt_hash=prompt_hash,
+    )
+
+
+def record_visual_adherence_review(
+    session_root: str | Path,
+    session_id: str,
+    actual_image: str | Path,
+    *,
+    observations: Mapping[str, Any],
+    prompt_hash: str | None = None,
+) -> dict[str, Any]:
+    return InteractionRuntime(session_root).record_visual_adherence_review(
+        session_id,
+        actual_image,
+        observations=observations,
+        prompt_hash=prompt_hash,
+    )
+
+
+def build_visual_repair_plan(
+    session_root: str | Path,
+    session_id: str,
+    *,
+    max_attempts: int = MAX_REPAIR_ATTEMPTS,
+    include_minor: bool = True,
+) -> dict[str, Any]:
+    return InteractionRuntime(session_root).build_visual_repair_plan(session_id, max_attempts=max_attempts, include_minor=include_minor)
+
+
+def record_visual_repair_generation(
+    session_root: str | Path,
+    session_id: str,
+    attempt_id: str,
+    repair_image: str | Path,
+    *,
+    repair_prompt: str | None = None,
+    prompt_hash: str | None = None,
+) -> dict[str, Any]:
+    return InteractionRuntime(session_root).record_visual_repair_generation(
+        session_id,
+        attempt_id,
+        repair_image,
+        repair_prompt=repair_prompt,
+        prompt_hash=prompt_hash,
+    )
+
+
+def record_visual_repair_review(
+    session_root: str | Path,
+    session_id: str,
+    attempt_id: str,
+    *,
+    observations: Mapping[str, Any],
+) -> dict[str, Any]:
+    return InteractionRuntime(session_root).record_visual_repair_review(session_id, attempt_id, observations=observations)
+
+
 __all__ = [
     "AIDecideGateResolver",
     "CreationMode",
+    "DEFAULT_BLOCKED_CONTEXT_SOURCES",
     "CreativeInteractionSession",
+    "GenerationArtifact",
     "GateResolution",
     "GateResolver",
     "GateType",
@@ -1494,8 +2500,18 @@ __all__ = [
     "ResolutionStatus",
     "SessionStatus",
     "UserDecideGateResolver",
+    "VisualAdherenceCritic",
+    "VisualAdherenceReview",
+    "VisualContextFirewall",
+    "VisualRepairError",
+    "VisualRepairPlan",
+    "build_visual_repair_plan",
     "detect_creation_mode",
     "migrate_legacy_artifact",
+    "record_visual_adherence_review",
+    "record_generation_artifact",
+    "record_visual_repair_generation",
+    "record_visual_repair_review",
     "replay_session",
     "resume_session",
 ]

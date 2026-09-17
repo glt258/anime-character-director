@@ -215,6 +215,18 @@ class ExplicitConstraintExtractor:
             positive_field("nonhuman_trait_level", "subtle fox traits")
         if re.search(r"正面|正对镜头|站立|front-facing", raw, re.IGNORECASE):
             positive_field("pose_intent", "STABLE_OPEN")
+        if re.search(r"右手.*(?:向前伸出|向外伸出|伸出).*(?:张开手掌|开掌)|right hand.*(?:extend|reach).*(?:open palm)", raw, re.IGNORECASE):
+            positive_field("right_arm_action", "extended outward")
+            positive_field("right_hand_gesture", "open palm outward")
+        if re.search(r"左手.*(?:放低|下垂|自然垂下)|left hand.*(?:relaxed low|hanging)", raw, re.IGNORECASE):
+            positive_field("left_arm_action", "relaxed at side")
+            positive_field("left_hand_gesture", "relaxed fingers")
+        if re.search(r"双手.*远离脸|双手不要靠脸|hands? away from (?:the )?face", raw, re.IGNORECASE):
+            positive_field("arm_configuration", "hands away from face")
+            positive_field("left_hand_gesture", "away from face")
+            positive_field("right_hand_gesture", "away from face")
+        if re.search(r"右手.*(?:摸脸|碰脸|扶脸)|right hand.*(?:touching|near|beside) (?:the )?(?:face|cheek)", raw, re.IGNORECASE):
+            positive_field("right_hand_gesture", "touching cheek")
 
         if re.search(r"不能只是普通人类女性加动物耳朵|not merely a human female with animal ears", raw, re.IGNORECASE):
             prohibit("archetype", "human female with cosmetic animal ears only", {"archetype": "cosmetic-animal-ears-only"})
