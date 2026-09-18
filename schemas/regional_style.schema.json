@@ -122,6 +122,10 @@
         "lower_body_constraints": {"type": "array", "items": {"type": "string"}},
         "visual_specification_contract": {"$ref": "#/$defs/visualSpecificationContract"},
         "prompt_adherence_manifest": {"$ref": "#/$defs/visualSpecificationContract"},
+        "explicit_constraints": {"type": "object"},
+        "explicit_constraint_coverage": {"type": "object"},
+        "explicit_constraint_locks": {"type": "object"},
+        "generation_allowed": {"type": "boolean"},
         "pose_intent": {"$ref": "#/$defs/poseIntentType"},
         "pose_intent_contract": {"$ref": "#/$defs/poseIntentContract"},
         "prompt": {"type": "string", "minLength": 1}
@@ -141,6 +145,10 @@
         "face_aesthetic_contract": {"$ref": "#/$defs/faceAestheticContract"},
         "soft_intent": {"type": "object", "additionalProperties": {"type": "string"}},
         "anti_substitution": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+        "explicit_constraints": {"type": "object"},
+        "explicit_constraint_coverage": {"type": "object"},
+        "explicit_constraint_locks": {"type": "object"},
+        "generation_allowed": {"type": "boolean"},
         "pose_specification": {
           "type": "object",
           "properties": {

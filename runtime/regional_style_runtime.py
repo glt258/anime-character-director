@@ -448,6 +448,8 @@ def _visual_anti_substitution(
         result["footwear_category"] = ("no shoes, boots, heels, pumps, or stilettos",)
     elif "combat boot" in footwear:
         result["footwear_category"] = ("do not substitute stilettos, pumps, or generic high heels",)
+    elif "open-toe high heel" in footwear or "open toe high heel" in footwear:
+        result["footwear_category"] = ("do not substitute combat boots, pumps, or closed footwear",)
 
     wings = str(hard.get("wing_strategy", "")).lower()
     if any(token in wings for token in ("symbolic", "motif", "graphic")):
@@ -458,6 +460,8 @@ def _visual_anti_substitution(
         result["hair_structure"] = ("do not extend into long flowing or waist-length hair",)
 
     costume = str(hard.get("costume_topology", "")).lower()
+    if "maid" in costume:
+        result["costume_topology"] = ("do not substitute armor, trousers, or unrelated fantasy costume topology",)
     if any(token in costume for token in ("trouser", "pants")):
         result["costume_topology"] = ("no skirt, gown, lingerie dress, or high-slit evening dress",)
 
@@ -501,6 +505,10 @@ class VisualSpecificationContract:
     face_aesthetic_guardrails: tuple[str, ...] = DEFAULT_FACE_AESTHETIC_GUARDRAILS
     style_inheritance_policy: str = DEFAULT_STYLE_INHERITANCE_POLICY
     face_aesthetic_contract: dict[str, Any] = field(default_factory=dict)
+    explicit_constraints: dict[str, dict[str, Any]] = field(default_factory=dict)
+    explicit_constraint_coverage: dict[str, dict[str, Any]] = field(default_factory=dict)
+    explicit_constraint_locks: dict[str, Any] = field(default_factory=dict)
+    generation_allowed: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         data = deepcopy(asdict(self))
@@ -517,12 +525,55 @@ class VisualSpecificationContract:
         return data
 
 
+class ExplicitConstraintCoverageGate:
+    """Verify that every current-run human hard field survived compilation."""
+
+    @staticmethod
+    def evaluate(prompt_bundle: Mapping[str, Any] | PromptBundle) -> dict[str, Any]:
+        data = prompt_bundle.to_dict() if isinstance(prompt_bundle, PromptBundle) else dict(prompt_bundle)
+        contract = data.get("visual_specification_contract") or {}
+        records = contract.get("explicit_constraints") or data.get("explicit_constraints") or {}
+        prompt = str(data.get("prompt", ""))
+        positive = prompt.split("## Negative Constraints", 1)[0].lower()
+        negative = prompt.split("## NEGATIVE / DO-NOT-SUBSTITUTE", 1)[-1].lower()
+        fields: dict[str, dict[str, Any]] = {}
+        for name, record in records.items():
+            record = dict(record) if isinstance(record, Mapping) else {"value": record}
+            value = record.get("value")
+            if str(name).startswith("raw_hard_constraint_"):
+                fields[name] = {**record, "status": "NOT_REPRESENTABLE", "reason": "raw hard constraint preserved verbatim"}
+                continue
+            if isinstance(value, dict):
+                values = [part for key, item in value.items() for part in (key, item)]
+            else:
+                values = value if isinstance(value, list) else [value]
+            tokens = [str(item).replace("_", " ").lower() for item in values if item not in (None, "")]
+            matched = [
+                token
+                for token in tokens
+                if any(variant in positive for variant in (token, token.replace(" ", "_"), token.replace(" ", "-")))
+            ]
+            status = "COVERED" if matched and len(matched) == len(tokens) else "PARTIALLY_COVERED" if matched else "DROPPED"
+            if matched and any(token in negative and token not in positive for token in tokens):
+                status = "CONFLICTED"
+            fields[name] = {**record, "status": status, "matched": matched}
+        blocking = [name for name, item in fields.items() if item.get("status") in {"DROPPED", "CONFLICTED"}]
+        return {
+            "status": "FAIL" if blocking else "PASS",
+            "generation_allowed": not blocking,
+            "blocking_fields": blocking,
+            "fields": fields,
+            "gate": "ExplicitConstraintCoverageGate",
+        }
+
+
 def build_visual_specification_contract(
     *,
     design_dna: Mapping[str, Any] | None = None,
     visual_preferences: Mapping[str, Any] | None = None,
     character_visual_style: str = "",
     explicit_user_fields: Sequence[str] = (),
+    explicit_constraints: Mapping[str, Any] | None = None,
     soft_intent: Mapping[str, Any] | None = None,
     face_aesthetic_profile: str | None = None,
     face_aesthetic_source: str | None = None,
@@ -543,6 +594,10 @@ def build_visual_specification_contract(
     )
     hard: dict[str, Any] = {}
     explicit_hard: list[str] = []
+    records = {
+        str(name): dict(record) if isinstance(record, Mapping) else {"value": record, "source": "human_explicit", "priority": "HARD", "locked": True}
+        for name, record in dict(explicit_constraints or {}).items()
+    }
 
     for field_name in HARD_VISUAL_FIELDS:
         value = dna.get(field_name)
@@ -611,6 +666,53 @@ def build_visual_specification_contract(
             strong[name] = str(visual[name])
     strong["face_aesthetic_profile"] = face_selection.face_aesthetic_profile
 
+    explicit_hard_map = {
+        "gender_presentation": "gender_presentation",
+        "role_identity": "role_identity",
+        "costume_identity": "costume_topology",
+        "human_form_requirement": "human_form_requirement",
+        "supernatural_state": "supernatural_state",
+        "character_state": "character_state",
+        "body_proportion": "body_proportion",
+        "bust_emphasis": "bust_emphasis",
+        "props": "props",
+        "companion_type": "companion_type",
+        "companion_count": "companion_count",
+        "nonhuman_features": "nonhuman_features",
+        "hair": "hair",
+        "pose": "pose",
+        "background": "background",
+        "composition": "composition",
+        "legwear": "legwear_strategy",
+        "footwear": "footwear_category",
+        "footwear_detail": "footwear_detail",
+        "palette_primary": "palette_primary",
+        "palette_secondary": "palette_secondary",
+        "horns": "horn_topology",
+        "tail": "tail_design",
+        "wings": "wing_strategy",
+        "quantity_constraints": "quantity_constraints",
+    }
+    for name, record in records.items():
+        value = record.get("value")
+        if value in (None, ""):
+            continue
+        target = explicit_hard_map.get(name, name)
+        if name == "costume_identity" and str(value) == "maid_outfit":
+            value = "maid-based"
+        if name == "footwear" and str(value) == "open_toe_high_heels":
+            value = "open-toe high heels"
+        if name == "legwear" and str(value) == "blue_white_striped_stockings":
+            value = "blue-white striped stockings"
+        hard[target] = json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else str(value)
+        explicit_hard.append(target)
+    if "palette_primary" in records or "palette_secondary" in records:
+        primary = records.get("palette_primary", {}).get("value", "white")
+        secondary = records.get("palette_secondary", {}).get("value", "blue")
+        hard["palette_family"] = f"{primary} dominant / {secondary} secondary"
+        explicit_hard.append("palette_family")
+        strong["palette_family"] = hard["palette_family"]
+
     soft = {
         str(name): str(value)
         for name, value in dict(soft_intent or {}).items()
@@ -630,6 +732,8 @@ def build_visual_specification_contract(
         face_aesthetic_guardrails=face_selection.face_aesthetic_guardrails,
         style_inheritance_policy=style_inheritance_policy or DEFAULT_STYLE_INHERITANCE_POLICY,
         face_aesthetic_contract=face_selection.to_dict(),
+        explicit_constraints=records,
+        explicit_constraint_locks=deepcopy(records),
     )
 
 
@@ -672,6 +776,10 @@ def _normalize_visual_specification_contract(
         face_aesthetic_guardrails=tuple(str(item) for item in data.get("face_aesthetic_guardrails", DEFAULT_FACE_AESTHETIC_GUARDRAILS)),
         style_inheritance_policy=str(data.get("style_inheritance_policy", DEFAULT_STYLE_INHERITANCE_POLICY)),
         face_aesthetic_contract=deepcopy(dict(data.get("face_aesthetic_contract") or {})),
+        explicit_constraints=deepcopy(dict(data.get("explicit_constraints") or {})),
+        explicit_constraint_coverage=deepcopy(dict(data.get("explicit_constraint_coverage") or {})),
+        explicit_constraint_locks=deepcopy(dict(data.get("explicit_constraint_locks") or {})),
+        generation_allowed=bool(data.get("generation_allowed", True)),
     )
 
 
@@ -1193,6 +1301,10 @@ class PromptBundle:
     face_aesthetic_source: str = DEFAULT_FACE_AESTHETIC_SOURCE
     face_aesthetic_guardrails: tuple[str, ...] = DEFAULT_FACE_AESTHETIC_GUARDRAILS
     style_inheritance_policy: str = DEFAULT_STYLE_INHERITANCE_POLICY
+    explicit_constraints: dict[str, dict[str, Any]] = field(default_factory=dict)
+    explicit_constraint_coverage: dict[str, dict[str, Any]] = field(default_factory=dict)
+    explicit_constraint_locks: dict[str, Any] = field(default_factory=dict)
+    generation_allowed: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -1242,6 +1354,7 @@ class PromptCompiler:
         face_aesthetic_profile: str | FaceAestheticProfile | None = None,
         face_aesthetic_source: str | FaceAestheticSource | None = None,
         style_inheritance_policy: str | None = None,
+        explicit_constraints: Mapping[str, Any] | None = None,
     ) -> PromptBundle:
         firewall = VisualContextFirewall.from_metadata(visual_context_firewall)
         if not firewall.visual_context_firewall_applied:
@@ -1328,6 +1441,26 @@ class PromptCompiler:
         ]
         if character_identity:
             prompt_lines.extend(("", "## CHARACTER IDENTITY", character_identity))
+        if explicit_constraints:
+            prompt_lines.extend(("", "## USER EXPLICIT HARD REQUIREMENTS"))
+            for name, record in explicit_constraints.items():
+                record = record if isinstance(record, Mapping) else {"value": record}
+                value = record.get("value")
+                if isinstance(value, list):
+                    value = ", ".join(str(item) for item in value)
+                if name == "quantity_constraints" and isinstance(record.get("value"), Mapping):
+                    value = ", ".join(
+                        f"exactly {count} {str(item).replace('_', ' ')}"
+                        for item, count in record["value"].items()
+                    )
+                prompt_lines.extend(
+                    (
+                        f"{_visual_field_label(name)}: {value}",
+                        f"Source: {record.get('source', 'human_explicit')}",
+                        f"Priority: {record.get('priority', 'HARD')}",
+                        f"Evidence: {record.get('raw_evidence', '')}",
+                    )
+                )
         if visual_contract is not None:
             if visual_contract.hard_constraints:
                 prompt_lines.extend(("", "## HARD DESIGN SPECIFICATION"))
@@ -1491,6 +1624,11 @@ class PromptCompiler:
             face_aesthetic_source=face_selection.face_aesthetic_source,
             face_aesthetic_guardrails=face_selection.face_aesthetic_guardrails,
             style_inheritance_policy=face_selection.style_inheritance_policy,
+            explicit_constraints={
+                str(name): dict(record) if isinstance(record, Mapping) else {"value": record}
+                for name, record in dict(explicit_constraints or {}).items()
+            },
+            explicit_constraint_locks=deepcopy(dict(explicit_constraints or {})),
         )
 
 

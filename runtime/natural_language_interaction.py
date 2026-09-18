@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from copy import deepcopy
 from enum import Enum
 import re
 from typing import Any, Mapping, Sequence
@@ -101,6 +102,8 @@ class ExplicitConstraintExtractor:
         constraints: dict[str, Any] = {
             "raw": raw,
             "explicit_user_fields": [],
+            "explicit_constraint_records": {},
+            "raw_hard_constraints": [],
             "negative_constraints": {},
             "prohibited": [],
             "prohibited_constraints": [],
@@ -118,12 +121,52 @@ class ExplicitConstraintExtractor:
             if text_value not in constraints["prohibited"]:
                 constraints["prohibited"].append(text_value)
 
-        def positive_field(name: str, value: Any) -> None:
+        def positive_field(name: str, value: Any, evidence: str | None = None, *, record: bool = True) -> None:
             constraints[name] = value
             positive[name] = value
             if name not in constraints["explicit_user_fields"]:
                 constraints["explicit_user_fields"].append(name)
             constraints["constraint_provenance"][name] = "explicit_user"
+            if record:
+                constraints["explicit_constraint_records"][name] = {
+                    "field": name,
+                    "value": deepcopy(value) if isinstance(value, (dict, list)) else value,
+                    "required_value": deepcopy(value) if isinstance(value, (dict, list)) else value,
+                    "source": "human_explicit",
+                    "confidence": 1.0,
+                    "raw_evidence": evidence or raw,
+                    "priority": "HARD",
+                    "locked": True,
+                }
+
+        def explicit_field(name: str, value: Any, evidence: str, *aliases: str) -> None:
+            positive_field(name, value, evidence)
+            for alias in aliases:
+                positive_field(alias, value, evidence, record=False)
+
+        def list_field(name: str, value: Any, evidence: str, *aliases: str) -> None:
+            current = constraints.get(name)
+            values = list(current) if isinstance(current, list) else []
+            if value not in values:
+                values.append(value)
+            explicit_field(name, values, evidence, *aliases)
+
+        def raw_hard_constraint(clause: str, evidence: str) -> None:
+            item = {
+                "field": "raw_hard_constraint",
+                "value": clause.strip(),
+                "required_value": clause.strip(),
+                "source": "human_explicit",
+                "confidence": 1.0,
+                "raw_evidence": evidence,
+                "priority": "HARD",
+                "locked": True,
+            }
+            if item not in constraints["raw_hard_constraints"]:
+                constraints["raw_hard_constraints"].append(item)
+
+        for match in re.finditer(r"(?:硬性要求|必须保留|must\s+(?:include|retain|keep))\s*[:：]?\s*([^。.!！;；\n]+)", raw, re.IGNORECASE):
+            raw_hard_constraint(match.group(1), match.group(0))
 
         def negative_field(name: str, value: Any, label: str | None = None) -> None:
             negative[name] = value
@@ -187,14 +230,92 @@ class ExplicitConstraintExtractor:
         ]
         if positive_style_matches:
             positive_field("hair_style_family", "long hair" if positive_style_matches[-1].group("length") == "长" else "short hair")
+        if "hair_color" in constraints or "hair_style_family" in constraints:
+            hair_parts = [constraints.get("hair_color"), constraints.get("hair_style_family")]
+            explicit_field("hair", " ".join(str(part) for part in hair_parts if part), "发色/发型")
+            # Keep the legacy explicit_user_fields shape; hair_color/hair_style_family remain the UI locks.
+            constraints["explicit_user_fields"].remove("hair")
         if re.search(r"很拽|拽|傲娇|高冷|冷淡|arrogant|aloof", raw, re.IGNORECASE):
             positive_field("personality", "arrogant/aloof")
         if re.search(r"成年|adult", raw, re.IGNORECASE):
             positive_field("age_group", "adult")
-        if re.search(r"女性|女人|女角色|female|woman", raw, re.IGNORECASE):
-            positive_field("gender", "female")
-        elif re.search(r"男性|男人|男角色|male|man", raw, re.IGNORECASE):
-            positive_field("gender", "male")
+        if re.search(r"女性|女人|女角色|女仆|女仆长|侍女|female|woman", raw, re.IGNORECASE):
+            explicit_field("gender_presentation", "female", "女性/女角色/女仆", "gender")
+        elif re.search(r"男性|男人|男角色|男仆|male|man", raw, re.IGNORECASE):
+            explicit_field("gender_presentation", "male", "男性/男角色", "gender")
+
+        role_match = re.search(r"女仆长|head\s*maid|maid\s*leader", raw, re.IGNORECASE)
+        if role_match:
+            explicit_field("role_identity", "head_maid", role_match.group(0))
+        elif re.search(r"女仆|侍女|maid", raw, re.IGNORECASE):
+            explicit_field("role_identity", "maid", "女仆/侍女/maid")
+        if re.search(r"女仆装|maid\s*(?:outfit|uniform|dress)", raw, re.IGNORECASE) or constraints.get("role_identity") in {"maid", "head_maid"}:
+            explicit_field("costume_identity", "maid_outfit", "女仆装/maid outfit")
+        if re.search(r"幽灵|ghost", raw, re.IGNORECASE):
+            explicit_field("supernatural_state", "ghost", "幽灵/ghost")
+            explicit_field("character_state", "ghost", "幽灵/ghost")
+        if re.search(r"人类形态|人类的样貌|人类全身|human\s+(?:form|appearance)|full[- ]body human", raw, re.IGNORECASE):
+            explicit_field("human_form_requirement", "human_form", "人类形态/人类的样貌和全身")
+        if re.search(r"全身|full[- ]body", raw, re.IGNORECASE):
+            explicit_field("composition", "full_body", "全身/full-body")
+        if re.search(r"欧美脸型|欧美审美|western[- ]inspired face|western face", raw, re.IGNORECASE):
+            explicit_field("face_reference", "western_face", "欧美脸型")
+        if re.search(r"商业二游|商业 gacha|commercial gacha", raw, re.IGNORECASE):
+            explicit_field("style_contract", "contemporary commercial gacha anime", "商业二游/commercial gacha")
+
+        bust_match = re.search(r"(大胸|大胸部|large\s*(?:bust|breasts?)|large[- ]bust|中胸|medium\s*bust|小胸|small\s*bust)", raw, re.IGNORECASE)
+        if bust_match:
+            bust_value = "large_bust" if re.search(r"大胸|large", bust_match.group(0), re.IGNORECASE) else "medium_bust" if re.search(r"中胸|medium", bust_match.group(0), re.IGNORECASE) else "small_bust"
+            emphasis = bust_value.split("_", 1)[0]
+            explicit_field("body_proportion", bust_value, bust_match.group(0), "body_build")
+            explicit_field("bust_emphasis", emphasis, bust_match.group(0))
+        if re.search(r"扇子|fan", raw, re.IGNORECASE):
+            list_field("props", "fan", "扇子/fan", "major_accessories")
+        doll_match = re.search(r"(两个|兩個|2|two)\s*幽灵娃娃|(two|2)\s*ghost\s*dolls?", raw, re.IGNORECASE)
+        if doll_match:
+            list_field("props", "ghost_dolls", doll_match.group(0), "major_accessories")
+            explicit_field("quantity_constraints", {"ghost_dolls": 2}, doll_match.group(0))
+            explicit_field("companion_type", "ghost_doll", doll_match.group(0))
+            explicit_field("companion_count", 2, doll_match.group(0))
+        elif re.search(r"幽灵娃娃|ghost\s*dolls?", raw, re.IGNORECASE):
+            list_field("props", "ghost_dolls", "幽灵娃娃/ghost dolls", "major_accessories")
+
+        fox_evidence = re.search(r"狐耳(?:朵)?.{0,8}白色|白色.{0,8}狐耳(?:朵)?|white\s+fox\s+ears?|白色狐耳(?:朵)?|狐耳(?:朵)?", raw, re.IGNORECASE)
+        if fox_evidence:
+            explicit_field("nonhuman_features", "white_fox_ears", fox_evidence.group(0), "nonhuman_trait_level")
+        elif re.search(r"狐耳|狐狸|狐系|fox", raw, re.IGNORECASE):
+            explicit_field("nonhuman_features", "fox_ears", "狐耳/狐狸/fox", "nonhuman_trait_level")
+        horn_match = re.search(r"(魅魔角|恶魔角|公羊角|羊角|有角|horns?)", raw, re.IGNORECASE)
+        if horn_match and not re.search(r"(?:不要|没有|无|no|without)\s*" + re.escape(horn_match.group(1)), raw, re.IGNORECASE):
+            horn_value = {
+                "魅魔角": "demon horns",
+                "恶魔角": "demon horns",
+                "公羊角": "ram horns",
+                "羊角": "ram horns",
+            }.get(horn_match.group(1).lower(), "horns")
+            explicit_field("horns", horn_value, horn_match.group(0), "horn_topology")
+        if re.search(r"(?:有|带有|拥有)\s*(?:翅膀|羽翼)|\bwings?\b", raw, re.IGNORECASE):
+            explicit_field("wings", "physical wings", "翅膀/wings", "wing_strategy")
+        if re.search(r"(?:有|带有|拥有)\s*(?:尾巴|尾)|\btail\b", raw, re.IGNORECASE):
+            explicit_field("tail", "tail", "尾巴/tail", "tail_design")
+
+        if re.search(r"条纹丝袜\s*(?:蓝白|白蓝)|蓝白(?:色)?(?:相间)?条纹丝袜|蓝白相间丝袜|blue[- ]white\s+striped\s+stockings?", raw, re.IGNORECASE):
+            explicit_field("legwear", "blue_white_striped_stockings", "条纹丝袜蓝白/蓝白条纹丝袜", "legwear_family")
+        if re.search(r"露趾(?:的)?(?:细|尖头)?高跟|露趾高跟鞋|open[- ]toe\s+high\s+heels?", raw, re.IGNORECASE):
+            explicit_field("footwear", "open_toe_high_heels", "露趾的高跟/露趾高跟", "footwear_family")
+        if re.search(r"脚趾被丝袜包裹|脚趾.*丝袜包裹|toes?\s+(?:covered|wrapped)\s+by\s+stockings?", raw, re.IGNORECASE):
+            explicit_field("footwear_detail", "toes_covered_by_stockings", "脚趾被丝袜包裹")
+        palette_match = re.search(r"(?:整体色调|主色调)\s*(?:以)?\s*(白色|白|white)\s*(?:为主|dominant).*?(?:蓝色|蓝|blue)\s*(?:为辅助|secondary|辅助)", raw, re.IGNORECASE)
+        if palette_match:
+            explicit_field("palette_primary", "white", palette_match.group(1))
+            explicit_field("palette_secondary", "blue", palette_match.group(0))
+        else:
+            primary = re.search(r"(?:white|白色?)\s*(?:dominant|为主)", raw, re.IGNORECASE)
+            secondary = re.search(r"(?:blue|蓝色?)\s*(?:secondary|为辅助|辅助)", raw, re.IGNORECASE)
+            if primary:
+                explicit_field("palette_primary", "white", primary.group(0))
+            if secondary:
+                explicit_field("palette_secondary", "blue", secondary.group(0))
 
         eye = self._last_color(raw, r"(?:眼睛|瞳色|眼眸)(?:改成|换成|用|是|为)?\s*(银灰|银白|粉色|粉|银|白|黑|蓝|红|金|紫|绿|绿色|琥珀)")
         if eye:
@@ -221,10 +342,10 @@ class ExplicitConstraintExtractor:
             positive_field("outfit_lower", "shorts/pants")
         if re.search(r"性感程度\s*(?:为|改成|换成)?\s*中等|中等性感|moderate fanservice", raw, re.IGNORECASE):
             positive_field("fanservice_level", "moderate")
-        if re.search(r"兽耳|狐狸|狐系|fox", raw, re.IGNORECASE):
-            positive_field("nonhuman_trait_level", "subtle fox traits")
+        if re.search(r"兽耳|狐狸|狐系|fox", raw, re.IGNORECASE) and "nonhuman_features" not in constraints:
+            explicit_field("nonhuman_features", "fox_ears", "兽耳/狐狸/fox", "nonhuman_trait_level")
         if re.search(r"正面|正对镜头|站立|front-facing", raw, re.IGNORECASE):
-            positive_field("pose_intent", "STABLE_OPEN")
+            explicit_field("pose", "front-facing stable open stance", "正面/正对镜头/站立", "pose_intent")
         if re.search(r"右手.*(?:向前伸出|向外伸出|伸出).*(?:张开手掌|开掌)|right hand.*(?:extend|reach).*(?:open palm)", raw, re.IGNORECASE):
             positive_field("right_arm_action", "extended outward")
             positive_field("right_hand_gesture", "open palm outward")
@@ -237,6 +358,9 @@ class ExplicitConstraintExtractor:
             positive_field("right_hand_gesture", "away from face")
         if re.search(r"右手.*(?:摸脸|碰脸|扶脸)|right hand.*(?:touching|near|beside) (?:the )?(?:face|cheek)", raw, re.IGNORECASE):
             positive_field("right_hand_gesture", "touching cheek")
+        background_match = re.search(r"背景\s*(?:是|为|用)?\s*([^。.!！;；]+)|background\s*(?:is|with)?\s*([^.!?]+)", raw, re.IGNORECASE)
+        if background_match:
+            explicit_field("background", next((item for item in background_match.groups() if item), "" ).strip(), background_match.group(0))
 
         if re.search(r"不能只是普通人类女性加动物耳朵|not merely a human female with animal ears", raw, re.IGNORECASE):
             prohibit("archetype", "human female with cosmetic animal ears only", {"archetype": "cosmetic-animal-ears-only"})
@@ -262,6 +386,11 @@ class ExplicitConstraintExtractor:
 
         constraints["positive_constraints"] = positive
         constraints["negative_constraints"] = negative
+        conflicts = []
+        if constraints.get("footwear") and constraints.get("footwear_family") == "barefoot":
+            conflicts.append("footwear=open_toe_high_heels conflicts with footwear_family=barefoot")
+        if conflicts:
+            constraints["constraint_conflicts"] = conflicts
         if not constraints["explicit_user_fields"]:
             constraints.pop("explicit_user_fields")
         return constraints

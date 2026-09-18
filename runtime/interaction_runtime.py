@@ -23,6 +23,7 @@ try:
         DEFAULT_FACE_AESTHETIC_SOURCE,
         DEFAULT_STYLE_INHERITANCE_POLICY,
         DEFAULT_REGIONAL_VISUAL_LANGUAGE,
+        ExplicitConstraintCoverageGate,
         PromptCompiler,
         PromptConstraintConflict,
         build_visual_specification_contract,
@@ -64,6 +65,7 @@ except ImportError:  # pragma: no cover - supports direct host imports
         DEFAULT_FACE_AESTHETIC_SOURCE,
         DEFAULT_STYLE_INHERITANCE_POLICY,
         DEFAULT_REGIONAL_VISUAL_LANGUAGE,
+        ExplicitConstraintCoverageGate,
         PromptCompiler,
         PromptConstraintConflict,
         build_visual_specification_contract,
@@ -116,6 +118,10 @@ class CreationMode(_ValueEnum):
     QUICK = "QUICK"
     AI_DECIDE = "AI_DECIDE"
     USER_DECIDE = "USER_DECIDE"
+
+
+class ExplicitUserConstraintConflict(ValueError):
+    """Raised when a current-run UI action contradicts a human hard field."""
 
 
 class PipelineStage(_ValueEnum):
@@ -610,6 +616,48 @@ def _visual_sheet(
             values["relationship_to_character_style"] = f"extends the selected {selected.get('short_label') or selected.get('design_thesis') or 'character direction'}"
             values["visual_reason"] = "keeps the selected character direction coherent while preserving a distinct lower-body read"
     values.update({name: constraints[name] for name in ("hair_color", "footwear_family", "legwear_family", "nonhuman_trait_level") if name in constraints})
+    explicit_values = {
+        "gender_presentation": constraints.get("gender_presentation"),
+        "role_identity": constraints.get("role_identity"),
+        "costume_identity": constraints.get("costume_identity"),
+        "human_form_requirement": constraints.get("human_form_requirement"),
+        "supernatural_state": constraints.get("supernatural_state"),
+        "character_state": constraints.get("character_state"),
+        "body_proportion": constraints.get("body_proportion"),
+        "bust_emphasis": constraints.get("bust_emphasis"),
+        "props": constraints.get("props"),
+        "companion_type": constraints.get("companion_type"),
+        "companion_count": constraints.get("companion_count"),
+        "nonhuman_features": constraints.get("nonhuman_features"),
+        "hair": constraints.get("hair"),
+        "pose": constraints.get("pose"),
+        "background": constraints.get("background"),
+        "composition": constraints.get("composition"),
+        "legwear": constraints.get("legwear"),
+        "footwear": constraints.get("footwear"),
+        "footwear_detail": constraints.get("footwear_detail"),
+        "palette_primary": constraints.get("palette_primary"),
+        "palette_secondary": constraints.get("palette_secondary"),
+        "horns": constraints.get("horns"),
+        "tail": constraints.get("tail"),
+        "wings": constraints.get("wings"),
+        "quantity_constraints": constraints.get("quantity_constraints"),
+    }
+    for name, value in explicit_values.items():
+        if value is not None:
+            values[name] = deepcopy(value)
+    if constraints.get("role_identity") in {"maid", "head_maid"} or constraints.get("costume_identity") == "maid_outfit":
+        values["outfit_direction"] = "maid-based"
+    if constraints.get("body_proportion"):
+        values["body_build"] = "large-bust feminine build"
+    if constraints.get("props"):
+        values["major_accessories"] = ", ".join(str(item) for item in constraints["props"])
+    if constraints.get("legwear"):
+        values["legwear_family"] = constraints["legwear"]
+    if constraints.get("footwear"):
+        values["footwear_family"] = constraints["footwear"]
+    if constraints.get("palette_primary") or constraints.get("palette_secondary"):
+        values["dominant_palette"] = f"{constraints.get('palette_primary', 'white')} dominant / {constraints.get('palette_secondary', 'blue')} secondary"
     user_fields = tuple(IDENTITY_VARIABLES) + (
         "footwear_family",
         "legwear_family",
@@ -622,6 +670,31 @@ def _visual_sheet(
         "fanservice_level",
         "body_build",
         "nonhuman_trait_level",
+        "gender_presentation",
+        "role_identity",
+        "costume_identity",
+        "human_form_requirement",
+        "supernatural_state",
+        "character_state",
+        "body_proportion",
+        "bust_emphasis",
+        "props",
+        "companion_type",
+        "companion_count",
+        "nonhuman_features",
+        "hair",
+        "pose",
+        "background",
+        "composition",
+        "legwear",
+        "footwear",
+        "footwear_detail",
+        "palette_primary",
+        "palette_secondary",
+        "horns",
+        "tail",
+        "wings",
+        "quantity_constraints",
     )
     context_alternatives = {
         "urban_watchful": {
@@ -959,6 +1032,8 @@ def _apply_visual_value(sheet: dict[str, Any], name: str, *, source: str, option
     if name not in variables:
         raise ValueError(f"unknown visual preference field: {name}")
     item = variables[name]
+    if item.get("selection_source") == "explicit_user" and source != "explicit_user":
+        raise ExplicitUserConstraintConflict(f"{name} is locked by the current user's explicit constraint")
     if option_id is not None:
         values = {str(option.get("id")): option.get("value") for option in item.get("options", [])}
         if option_id not in values:
@@ -1296,6 +1371,19 @@ class InteractionRuntime:
             novelty_policy=self.novelty_policy.to_dict(),
         )
         self._save(session)
+        if constraints.get("constraint_conflicts"):
+            session.status = SessionStatus.BLOCKED.value
+            session.audit_log.append({
+                "event": "current_user_constraint_conflict",
+                "error_code": "CURRENT_USER_CONSTRAINT_CONFLICT",
+                "conflicts": list(constraints["constraint_conflicts"]),
+            })
+            self._save(session)
+            return self._response(
+                session,
+                message="当前请求中的显式视觉要求互相冲突，未替你猜测取舍。",
+                error_code="CURRENT_USER_CONSTRAINT_CONFLICT",
+            )
         response = self._advance(session)
         self._save(session)
         return response
@@ -1339,6 +1427,9 @@ class InteractionRuntime:
                     response = self._rollback(session, event)
                 else:
                     response = self._advance(session, event)
+        except ExplicitUserConstraintConflict as error:
+            restored = CreativeInteractionSession.from_dict(snapshot)
+            return self._error_response(restored, "CURRENT_USER_CONSTRAINT_CONFLICT", str(error))
         except (ValueError, KeyError, TypeError) as error:
             restored = CreativeInteractionSession.from_dict(snapshot)
             return self._error_response(restored, "INVALID_INTERACTION", str(error))
@@ -2118,6 +2209,28 @@ class InteractionRuntime:
                         error_code=error.code,
                     )
                 session.compiled_prompt = compiled.to_dict()
+                coverage = ExplicitConstraintCoverageGate.evaluate(session.compiled_prompt)
+                session.compiled_prompt["explicit_constraint_coverage"] = coverage
+                session.compiled_prompt["generation_allowed"] = coverage["generation_allowed"]
+                contract = session.compiled_prompt.get("visual_specification_contract")
+                if isinstance(contract, dict):
+                    if coverage["fields"]:
+                        contract["explicit_constraint_coverage"] = deepcopy(coverage)
+                        contract["generation_allowed"] = coverage["generation_allowed"]
+                    session.compiled_prompt["prompt_adherence_manifest"] = deepcopy(contract)
+                if not coverage["generation_allowed"]:
+                    session.status = SessionStatus.BLOCKED.value
+                    session.artifact_status["compiled_prompt"] = "blocked"
+                    session.audit_log.append({
+                        "event": "explicit_constraint_coverage_failed",
+                        "error_code": "EXPLICIT_CONSTRAINT_COVERAGE_FAILED",
+                        "blocking_fields": coverage["blocking_fields"],
+                    })
+                    return self._response(
+                        session,
+                        message="显式用户硬约束未完整进入 PromptBundle，未进入 GENERATION_READY。",
+                        error_code="EXPLICIT_CONSTRAINT_COVERAGE_FAILED",
+                    )
                 session.artifact_status["compiled_prompt"] = "fresh"
                 session.current_stage = PipelineStage.GENERATION_READY.value
                 session.status = SessionStatus.GENERATION_READY.value
@@ -2360,19 +2473,24 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         **firewall.to_dict(),
     }
     for key, value in session.explicit_user_constraints.items():
-        if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "positive_constraints", "negative_constraints", "prohibited", "prohibited_constraints", "constraint_provenance"}:
+        if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "explicit_constraint_records", "raw_hard_constraints", "constraint_conflicts", "positive_constraints", "negative_constraints", "prohibited", "prohibited_constraints", "constraint_provenance"}:
             design.setdefault("visual_preferences", {})[key] = value
             design["provenance"][key] = "explicit_user"
             if key in lower_body:
                 design["lower_body"][key] = value
     design["age_group"] = session.explicit_user_constraints.get("age_group", "adult")
     design["explicit_user_constraints"] = deepcopy(session.explicit_user_constraints)
+    explicit_records = deepcopy(session.explicit_user_constraints.get("explicit_constraint_records") or {})
+    for index, record in enumerate(session.explicit_user_constraints.get("raw_hard_constraints") or ()):
+        explicit_records[f"raw_hard_constraint_{index}"] = deepcopy(record)
+    design["explicit_constraint_records"] = explicit_records
     design["constraint_priority"] = "explicit_user > human_selection > human_accept_recommended > delegated_ai > policy_default"
     visual_contract = build_visual_specification_contract(
         design_dna=design_dna,
         visual_preferences=design["visual_preferences"],
         character_visual_style=str(design["character_visual_style"]),
         explicit_user_fields=session.explicit_user_constraints.get("explicit_user_fields", ()),
+        explicit_constraints=explicit_records,
         soft_intent={"fanservice_level": design["visual_preferences"].get("fanservice_level")},
         face_aesthetic_profile=face_selection.face_aesthetic_profile,
         face_aesthetic_source=face_selection.face_aesthetic_source,
@@ -2423,12 +2541,14 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
         if name != "forbid_crossed_legs" and not (structured and name.startswith("forbid_hair_"))
     }
     contract = final_design.get("visual_specification_contract")
+    explicit_records = final_design.get("explicit_constraint_records") or explicit.get("explicit_constraint_records") or {}
     if not contract:
         contract = build_visual_specification_contract(
             design_dna=final_design.get("design_dna"),
             visual_preferences=visual,
             character_visual_style=str(final_design.get("character_visual_style", "")),
             explicit_user_fields=explicit.get("explicit_user_fields", ()),
+            explicit_constraints=explicit_records,
         ).to_dict()
     return {
         "character_visual_style": str(final_design.get("character_visual_style", "clean-line contemporary gacha anime")),
@@ -2447,6 +2567,7 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
         "face_aesthetic_source": final_design.get("face_aesthetic_source", DEFAULT_FACE_AESTHETIC_SOURCE),
         "style_inheritance_policy": final_design.get("style_inheritance_policy", DEFAULT_STYLE_INHERITANCE_POLICY),
         "visual_specification_contract": contract,
+        "explicit_constraints": explicit_records,
         "visual_context_firewall": {name: deepcopy(final_design.get(name)) for name in ("inherit_previous_visuals", "allowed_visual_inheritance", "blocked_context_sources", "visual_context_firewall_applied", "style_inheritance_policy")},
     }
 

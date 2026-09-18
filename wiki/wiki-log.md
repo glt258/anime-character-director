@@ -214,3 +214,6 @@
 - persisted recent fresh-run signatures in a separate history ledger and saved the first snapshot/review for replay; repairs do not create additional signatures
 - kept history one-way into novelty analysis only; no ImageGen, embedding, image similarity, critic, repair, or DesignDNA changes
 - added 21 focused tests and updated Skill/workflow/architecture documentation
+## [2026-09-18] architecture | Explicit User Constraint Contract
+- updated `architecture/interaction-system` — documented structured human-explicit locks and post-compiler coverage blocking.
+- updated `architecture/skill-and-runtime` — documented current-run constraint ownership and generation boundary.

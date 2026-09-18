@@ -359,6 +359,22 @@ def candidate_compatibility(candidate: Mapping[str, Any], constraints: Mapping[s
         violations.append("crossed legs")
     if negative.get("forbid_outfit_lower") and str(negative["forbid_outfit_lower"]).lower() in costume:
         violations.append(str(negative["forbid_outfit_lower"]))
+    records = constraints.get("explicit_constraint_records")
+    if isinstance(records, Mapping):
+        aliases = {
+            "legwear": "legwear_strategy",
+            "footwear": "footwear_category",
+            "horns": "horn_topology",
+            "tail": "tail_design",
+            "wings": "wing_strategy",
+        }
+        for field_name, record in records.items():
+            if field_name not in aliases or not isinstance(record, Mapping):
+                continue
+            expected = str(record.get("value", "")).lower()
+            observed = str(dna.get(aliases[field_name], "")).lower()
+            if expected and expected not in observed:
+                violations.append(f"explicit {field_name}={expected}")
     return {"status": "incompatible" if violations else "compatible", "violations": violations}
 
 
@@ -380,6 +396,93 @@ def _design_dna_library(original_input: str) -> tuple[DesignDNA, ...]:
     if _has(text, "魅魔", "succubus", "demoness"):
         return _SUCCUBUS_DNA
     return _DEFAULT_DNA
+
+
+def _apply_explicit_constraints_to_dna(
+    dna: Mapping[str, Any],
+    constraints: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Apply human-owned fields before a candidate reaches any gate."""
+    result = deepcopy(dict(dna))
+    raw = str(constraints.get("raw", "")).lower()
+    records = constraints.get("explicit_constraint_records")
+    records = records if isinstance(records, Mapping) else {}
+    locks: dict[str, Any] = {}
+
+    def value(name: str) -> Any:
+        record = records.get(name)
+        if isinstance(record, Mapping):
+            return record.get("value")
+        return constraints.get(name)
+
+    def lock(name: str, target: str | None = None) -> None:
+        resolved = value(name)
+        if resolved is None:
+            return
+        result[target or name] = deepcopy(resolved)
+        locks[name] = {"value": deepcopy(resolved), "source": "human_explicit", "priority": "HARD", "locked": True}
+
+    role = str(value("role_identity") or "").lower()
+    costume = str(value("costume_identity") or "").lower()
+    if role in {"maid", "head_maid"} or "maid" in costume:
+        result["costume_topology"] = "maid-based"
+        locks["costume_identity"] = {"value": value("costume_identity") or "maid_outfit", "source": "human_explicit", "priority": "HARD", "locked": True}
+    if value("body_proportion"):
+        result["upper_body_structure"] = "large-bust feminine structure"
+        result["body_proportion"] = value("body_proportion")
+        locks["body_proportion"] = {"value": value("body_proportion"), "source": "human_explicit", "priority": "HARD", "locked": True}
+    if value("legwear"):
+        lock("legwear", "legwear_strategy")
+    if value("footwear"):
+        lock("footwear", "footwear_category")
+    if value("palette_primary") or value("palette_secondary"):
+        primary = value("palette_primary") or str(result.get("palette_family", "")).split()[0]
+        secondary = value("palette_secondary") or ""
+        result["palette_family"] = f"{primary} dominant" + (f" / {secondary} secondary" if secondary else "")
+        for name in ("palette_primary", "palette_secondary"):
+            if value(name):
+                locks[name] = {"value": value(name), "source": "human_explicit", "priority": "HARD", "locked": True}
+    if value("props"):
+        props = value("props")
+        result["props"] = list(props) if isinstance(props, list) else [props]
+        result["major_accessories"] = ", ".join(str(item) for item in result["props"])
+        locks["props"] = {"value": deepcopy(props), "source": "human_explicit", "priority": "HARD", "locked": True}
+    if value("gender_presentation"):
+        result["gender_presentation"] = value("gender_presentation")
+    if value("nonhuman_features"):
+        result["nonhuman_features"] = value("nonhuman_features")
+        if "fox" in str(value("nonhuman_features")).lower():
+            result["horn_topology"] = "none"
+            result["tail_design"] = "none"
+            result["wing_strategy"] = "none"
+    if value("human_form_requirement"):
+        result["human_form_requirement"] = value("human_form_requirement")
+    if value("quantity_constraints"):
+        result["quantity_constraints"] = deepcopy(value("quantity_constraints"))
+    for name in (
+        "character_state",
+        "bust_emphasis",
+        "companion_type",
+        "companion_count",
+        "hair",
+        "pose",
+        "background",
+        "composition",
+        "footwear_detail",
+        "style_contract",
+        "face_reference",
+    ):
+        if value(name) is not None:
+            result[name] = deepcopy(value(name))
+            locks[name] = {"value": deepcopy(value(name)), "source": "human_explicit", "priority": "HARD", "locked": True}
+    for name, target in (("horns", "horn_topology"), ("tail", "tail_design"), ("wings", "wing_strategy")):
+        if value(name):
+            lock(name, target)
+    # Intrusive anatomy is opt-in; identity alone cannot silently re-enable it.
+    for name, target in (("horns", "horn_topology"), ("tail", "tail_design"), ("wings", "wing_strategy")):
+        if not value(name) and not _has(raw, "魅魔", "succubus", "demoness"):
+            result[target] = "none"
+    return result, locks
 
 
 def normalize_design_seed(seed: Any) -> int:
@@ -614,7 +717,7 @@ class CandidateGenerator:
             context_note_zh = f"围绕已选的“{prior_label}”继续展开。" if kind == "art" and prior_resolutions else ""
             context_note_en = f"Continues from the selected {prior_label}." if kind == "art" and prior_resolutions else ""
             dna = dna_library[(index - 1) % len(dna_library)]
-            dna_dict = dna.to_dict()
+            dna_dict, explicit_locks = _apply_explicit_constraints_to_dna(dna.to_dict(), constraints)
             result.append({
                 "id": f"candidate_{index:02d}",
                 "candidate_id": f"candidate_{index:02d}",
@@ -641,6 +744,7 @@ class CandidateGenerator:
                 "identity_source": "context_aware_candidate_generator",
                 "candidate_generator_version": CANDIDATE_GENERATOR_VERSION,
                 "design_dna": dna_dict,
+                "explicit_constraint_locks": deepcopy(explicit_locks),
                 "generation_context": {
                     "profile": profile,
                     "gate_id": gate_id,

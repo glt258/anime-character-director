@@ -7,6 +7,7 @@ import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
@@ -24,6 +25,33 @@ from runtime.interaction_runtime import (  # noqa: E402
     PipelineStage,
     SessionStatus,
 )
+
+
+class ProvenanceSemanticClass(str, Enum):
+    HUMAN_EXPLICIT = "HUMAN_EXPLICIT"
+    HUMAN_SELECTION = "HUMAN_SELECTION"
+    AI_RESOLVED = "AI_RESOLVED"
+    SYSTEM_DEFAULT = "SYSTEM_DEFAULT"
+    UNKNOWN = "UNKNOWN"
+
+
+_PROVENANCE_SEMANTICS = {
+    "explicit_user": ProvenanceSemanticClass.HUMAN_EXPLICIT,
+    "human_explicit": ProvenanceSemanticClass.HUMAN_EXPLICIT,
+    "human_select": ProvenanceSemanticClass.HUMAN_SELECTION,
+    "human_selection": ProvenanceSemanticClass.HUMAN_SELECTION,
+    "human_mix": ProvenanceSemanticClass.HUMAN_SELECTION,
+    "human_custom": ProvenanceSemanticClass.HUMAN_SELECTION,
+    "human_accept_recommended": ProvenanceSemanticClass.HUMAN_SELECTION,
+    "delegated_ai": ProvenanceSemanticClass.AI_RESOLVED,
+    "quick_ai_fill": ProvenanceSemanticClass.AI_RESOLVED,
+    "policy_default": ProvenanceSemanticClass.SYSTEM_DEFAULT,
+}
+
+
+def normalize_provenance(value: Any) -> ProvenanceSemanticClass:
+    """Map legal provenance labels from each interaction layer to one meaning."""
+    return _PROVENANCE_SEMANTICS.get(str(value).strip().casefold(), ProvenanceSemanticClass.UNKNOWN)
 
 
 OUTPUT_ROOT = Path("D:/benchmark/outputs/three_mode_interaction_ux_acceptance_v1_20260915")
@@ -320,8 +348,30 @@ def run_u6(ctx: CaseContext) -> Review:
     resolve_character(ctx)
     resolve_art(ctx)
     response = ctx.natural("全都按你推荐的来。")
-    good = response.status == SessionStatus.GENERATION_READY.value and all(source == "human_accept_recommended" for source in resolved_sources(ctx).values() if source)
-    return Review("PASS" if good else "FAIL", 1 if good else 5, "NO" if good else "YES", "PASS", "PASS" if good else "FAIL", [] if good else ["NATURAL_LANGUAGE_ACTION_PARSE_FAILURE"], f"status={response.status}; sources={resolved_sources(ctx)}.")
+    session = ctx.runtime.load_session(ctx.primary_session_id or "")
+    sources = resolved_sources(ctx)
+    explicit_fields = set(session.explicit_user_constraints.get("explicit_user_fields", ()))
+    variables = (session.visual_preference_sheet or {}).get("variables", {})
+    event_applied = any(
+        item.get("event", {}).get("action") == InteractionAction.USE_ALL_RECOMMENDED.value
+        for item in session.interaction_history
+    )
+    explicit_owned = all(
+        normalize_provenance(sources.get(name)) is ProvenanceSemanticClass.HUMAN_EXPLICIT
+        for name in explicit_fields
+        if name in sources
+    )
+    recommended_owned = all(
+        source == "human_accept_recommended"
+        and normalize_provenance(source) is ProvenanceSemanticClass.HUMAN_SELECTION
+        and variables[name].get("user_selection") == variables[name].get("recommended")
+        for name, source in sources.items()
+        if name not in explicit_fields and source
+    )
+    no_unknown_sources = all(normalize_provenance(source) is not ProvenanceSemanticClass.UNKNOWN for source in sources.values() if source)
+    good = response.status == SessionStatus.GENERATION_READY.value and event_applied and explicit_owned and recommended_owned and no_unknown_sources
+    notes = f"status={response.status}; event_applied={event_applied}; explicit_owned={explicit_owned}; recommended_owned={recommended_owned}; no_unknown_sources={no_unknown_sources}; sources={sources}."
+    return Review("PASS" if good else "FAIL", 1 if good else 5, "NO" if good else "YES", "PASS", "PASS" if good else "FAIL", [] if good else ["NATURAL_LANGUAGE_ACTION_PARSE_FAILURE"], notes)
 
 
 def run_m1(ctx: CaseContext) -> Review:
