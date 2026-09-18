@@ -6,7 +6,17 @@
 
 > One Skill. Three creation modes. From a character idea to a finished commercial anime/gacha illustration with Codex `$imagegen`.
 
-**Current release: `v1.2.0` · `ANIME_CHARACTER_DIRECTOR = RELEASED`**
+**Current release: `v1.3.0` · `ANIME_CHARACTER_DIRECTOR = RELEASED`**
+
+## v1.3.0 — Constraint Fidelity & Intelligent Repair
+
+v1.3.0 strengthens the boundary between human-owned character requirements, runtime defaults, and post-generation repair decisions.
+
+- **Face Aesthetic Isolation** — Fresh runs default to an East Asian commercial-gacha facial design language unless the current request explicitly asks for another facial aesthetic. Face-style preferences from previous runs are not inherited automatically.
+- **Explicit User Constraint Preservation** — Natural-language requirements such as costume, props, body proportions, legwear, footwear, palette, and non-human features are extracted as human-owned constraints and cannot be silently replaced by QUICK or AI_DECIDE defaults. Explicit constraint coverage is checked before generation.
+- **Safer Repair Decisions** — Strict visual fidelity is separated from repair necessity. AI-generated secondary deviations remain visible to the critic but do not automatically trigger risky full-image regeneration when the user's requirements are already satisfied.
+
+Users do not need to manually translate ordinary character-design requests into prompt-engineering syntax. Explicit visual requirements are extracted and protected by the runtime.
 
 Anime Character Director turns a character idea into a coherent, production-oriented 2D anime-game character design. After the selected mode resolves the design and the local Runtime validates it, the Skill hands the result to Codex built-in `$imagegen` and runs the existing technical quality audit.
 
@@ -54,13 +64,15 @@ Together, these results show differences in hairstyle, horn topology, costume an
 This is not merely a negative-prompt patch. The current pipeline separates character design, cross-run novelty checking, visual specification constraints, post-generation QA, and targeted repair:
 
 ```text
-Fresh Run
-→ Context Firewall
-→ Structured DesignDNA
+User Request
+→ Explicit Constraint Extraction
+→ Human-Owned Constraint Locking
+→ DesignDNA / PoseDNA / BackgroundDNA
 → CrossRunNoveltyGuard
 → Visual Specification Contract
 → Image Generation
-→ Visual Adherence Critic
+→ VisualAdherenceCritic
+→ AdherenceDispositionPolicy
 → Targeted Repair
 ```
 

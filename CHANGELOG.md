@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.3.0 — 2026-09-18
+
+Status: `ANIME_CHARACTER_DIRECTOR = RELEASED`
+
+Theme: `Constraint Fidelity & Intelligent Repair`
+
+### Added
+
+- Face Aesthetic Contract with an East Asian commercial-gacha default for fresh runs, plus explicit Western-inspired and neutral face options.
+- Explicit User Constraint Contract and coverage gate for ordinary natural-language requirements across role, presentation, costume, proportions, props, non-human features, hair, legwear, footwear, palette, pose, background, composition, and quantity.
+- Ownership-aware adherence disposition and repair-trigger policy separating strict visual fidelity from repair necessity.
+
+### Changed
+
+- QUICK and AI_DECIDE resolve only fields not explicitly owned by the user.
+- AI/default-only adherence deviations remain visible to review but do not automatically trigger repair.
+- Face-style inheritance is disabled by default for fresh runs.
+- Visual repair consumes policy-approved actionable targets rather than every raw critic suggestion.
+
+### Fixed
+
+- Cross-run Western-inspired facial-style leakage.
+- Explicit Chinese character-design requirements being dropped before prompt compilation.
+- Defaults such as unwanted horns, boots, or conflicting costume topology replacing explicit requirements.
+- UX U6 provenance false-positive classification.
+
 ## [1.1.0] — 2026-09-16
 
 Status: `ANIME_CHARACTER_DIRECTOR = RELEASED`

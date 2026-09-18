@@ -7,7 +7,7 @@ description: Direct original commercial 2D anime-game character creation through
 
 This skill is an Anime Character Art Director.
 
-Release status: `v1.1.0` — `ANIME_CHARACTER_DIRECTOR = RELEASED`.
+Release status: `v1.3.0` — `ANIME_CHARACTER_DIRECTOR = RELEASED`.
 
 The public product exposes exactly three top-level creation modes: `QUICK`, `AI_DECIDE`, and `USER_DECIDE`. The default mode is `AI_DECIDE`. Benchmark, Gate, Persistent Runner, and Candidate Generator are internal implementation terms, not user-facing modes.
 
