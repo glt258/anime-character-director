@@ -90,6 +90,32 @@ regional_visual_language:
     - "LEGWEAR_GROUNDING_FAIL"
     - "LOWER_BODY_ANCHOR_MISS"
 
+face_aesthetic:
+  default: "EAST_ASIAN_COMMERCIAL_GACHA_FACE"
+  inheritance_policy: "NO_FACE_AESTHETIC_INHERITANCE"
+  contracts:
+    EAST_ASIAN_COMMERCIAL_GACHA_FACE:
+      default_face_region_language: "East Asian commercial gacha anime facial design language"
+      facial_structure_bias: "anime-first facial abstraction, restrained facial planes, clean graphic jaw/chin construction"
+      facial_style_guardrail: "Do not drift toward western facial structure, western illustration-style facial treatment, comic-book facial design, or semi-realistic European/American fantasy portrait language."
+      guardrails:
+        - "keep anime-first facial abstraction and restrained facial planes"
+        - "do not drift toward western facial structure or semi-realistic western portrait language"
+    WESTERN_INSPIRED_GACHA_FACE:
+      default_face_region_language: "western-inspired face aesthetics within contemporary commercial gacha anime"
+      facial_structure_bias: "stylized western-inspired facial structure with controlled planes and commercial gacha simplification"
+      facial_style_guardrail: "Keep the same stylized anime-first commercial gacha medium; do not convert the full rendering language into western realistic illustration, western comic-book art, or semi-realistic fantasy portraiture."
+      guardrails:
+        - "remain within contemporary commercial gacha anime"
+        - "do not become western realistic illustration or semi-realistic fantasy portraiture"
+    NEUTRAL_GACHA_FACE:
+      default_face_region_language: "region-neutral commercial gacha anime facial design language"
+      facial_structure_bias: "stylized anime-first facial abstraction with balanced, non-regionalized facial planes"
+      facial_style_guardrail: "Avoid photorealistic portrait anatomy and avoid drifting into a specific western realistic illustration language."
+      guardrails:
+        - "remain stylized anime-first commercial gacha"
+        - "avoid photorealistic portrait anatomy"
+
 lower_body_visual_language:
   anti_fanservice_is_not_anti_exposure: true
   adult_free_exploration: true

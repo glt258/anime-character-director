@@ -19,10 +19,14 @@ from uuid import uuid4
 
 try:
     from .regional_style_runtime import (
+        DEFAULT_FACE_AESTHETIC_PROFILE,
+        DEFAULT_FACE_AESTHETIC_SOURCE,
+        DEFAULT_STYLE_INHERITANCE_POLICY,
         DEFAULT_REGIONAL_VISUAL_LANGUAGE,
         PromptCompiler,
         PromptConstraintConflict,
         build_visual_specification_contract,
+        resolve_face_aesthetic_profile,
     )
     from .visual_preference_runtime import (
         AI_IMPLEMENTATION_VARIABLES,
@@ -56,10 +60,14 @@ try:
     )
 except ImportError:  # pragma: no cover - supports direct host imports
     from regional_style_runtime import (  # type: ignore
+        DEFAULT_FACE_AESTHETIC_PROFILE,
+        DEFAULT_FACE_AESTHETIC_SOURCE,
+        DEFAULT_STYLE_INHERITANCE_POLICY,
         DEFAULT_REGIONAL_VISUAL_LANGUAGE,
         PromptCompiler,
         PromptConstraintConflict,
         build_visual_specification_contract,
+        resolve_face_aesthetic_profile,
     )
     from visual_preference_runtime import (  # type: ignore
         AI_IMPLEMENTATION_VARIABLES,
@@ -292,6 +300,8 @@ class GenerationArtifact:
     mode: str
     design_seed: int | None
     created_at: str
+    face_aesthetic_profile: str = DEFAULT_FACE_AESTHETIC_PROFILE
+    face_aesthetic_source: str = DEFAULT_FACE_AESTHETIC_SOURCE
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -310,6 +320,8 @@ class GenerationArtifact:
             mode=str(data.get("mode", "")),
             design_seed=data.get("design_seed"),
             created_at=str(data.get("created_at", "")),
+            face_aesthetic_profile=str(data.get("face_aesthetic_profile", DEFAULT_FACE_AESTHETIC_PROFILE)),
+            face_aesthetic_source=str(data.get("face_aesthetic_source", DEFAULT_FACE_AESTHETIC_SOURCE)),
         )
 
 
@@ -326,6 +338,8 @@ class CreativeInteractionSession:
     allowed_visual_inheritance: list[str] = field(default_factory=list)
     blocked_context_sources: list[str] = field(default_factory=lambda: list(DEFAULT_BLOCKED_CONTEXT_SOURCES))
     visual_context_firewall_applied: bool = True
+    style_inheritance_policy: str = DEFAULT_STYLE_INHERITANCE_POLICY
+    face_aesthetic_contract: dict[str, Any] = field(default_factory=dict)
     design_seed: int | None = None
     pending_constraint_updates: dict[str, Any] = field(default_factory=dict)
     delegated_fields: list[str] = field(default_factory=list)
@@ -407,6 +421,7 @@ def _session_firewall(session: CreativeInteractionSession) -> VisualContextFirew
         tuple(session.allowed_visual_inheritance),
         tuple(session.blocked_context_sources),
         bool(session.visual_context_firewall_applied),
+        str(session.style_inheritance_policy),
     )
 
 
@@ -490,6 +505,12 @@ def _visual_sheet(
     raw_input = str(original_input or constraints.get("raw", ""))
     profile = context_profile(raw_input, constraints)
     design_dna = _direction_design_dna(prior_resolutions)
+    face_selection = resolve_face_aesthetic_profile(
+        constraints.get("face_aesthetic_profile"),
+        source=constraints.get("face_aesthetic_source"),
+        explicit_user_selection="face_aesthetic_profile" in constraints.get("explicit_user_fields", ()),
+        style_inheritance_policy=firewall.style_inheritance_policy,
+    )
     context_values = {
         "urban_watchful": {
             "hair_style_family": "asymmetric long layers",
@@ -552,6 +573,10 @@ def _visual_sheet(
         "repetition_risk": "low",
         "pose_intent": "STABLE_OPEN",
         "pose_family": "OPEN_PARALLEL_STANCE",
+        "face_aesthetic_profile": face_selection.face_aesthetic_profile,
+        "face_aesthetic_source": face_selection.face_aesthetic_source,
+        "face_aesthetic_is_default": face_selection.face_aesthetic_is_default,
+        "style_inheritance_policy": face_selection.style_inheritance_policy,
     }
     values.update(context_values)
     if design_dna:
@@ -695,6 +720,8 @@ def _visual_sheet(
         **firewall.to_dict(),
         "regional_visual_language": DEFAULT_REGIONAL_VISUAL_LANGUAGE,
         "regional_visual_language_source": "default_style_policy",
+        **face_selection.to_dict(),
+        "face_aesthetic_contract": face_selection.to_dict(),
         "explicit_user_request": bool(set(constraints) - {"raw"}),
         "variables": variables,
         "optional_variables": {
@@ -1263,6 +1290,7 @@ class InteractionRuntime:
             allowed_visual_inheritance=list(firewall.allowed_visual_inheritance),
             blocked_context_sources=list(firewall.blocked_context_sources),
             visual_context_firewall_applied=firewall.visual_context_firewall_applied,
+            style_inheritance_policy=firewall.style_inheritance_policy,
             design_seed=stable_session_seed(resolved_session_id) if seed is None else int(seed),
             artifact_continuity=ARTIFACT_CONTINUITY_PENDING,
             novelty_policy=self.novelty_policy.to_dict(),
@@ -1395,6 +1423,7 @@ class InteractionRuntime:
         session.allowed_visual_inheritance = list(firewall.allowed_visual_inheritance)
         session.blocked_context_sources = list(firewall.blocked_context_sources)
         session.visual_context_firewall_applied = True
+        session.style_inheritance_policy = firewall.style_inheritance_policy
         if session.visual_preference_sheet is not None:
             session.visual_preference_sheet.update(firewall.to_dict())
         session.audit_log.append({"event": "visual_context_firewall", **firewall.to_dict(), "source": "explicit_user_request"})
@@ -1565,6 +1594,7 @@ class InteractionRuntime:
             "repair_attempts": deepcopy(session.repair_attempts),
             "best_artifact": deepcopy(session.best_artifact),
             "repair_status": session.repair_status,
+            "face_aesthetic_contract": deepcopy(session.face_aesthetic_contract or (session.final_design or {}).get("face_aesthetic_contract", {})),
         }
 
     def record_generation_artifact(
@@ -1623,6 +1653,8 @@ class InteractionRuntime:
             mode=session.creation_mode,
             design_seed=session.design_seed,
             created_at=_now(),
+            face_aesthetic_profile=str((session.final_design or {}).get("face_aesthetic_profile", DEFAULT_FACE_AESTHETIC_PROFILE)),
+            face_aesthetic_source=str((session.final_design or {}).get("face_aesthetic_source", DEFAULT_FACE_AESTHETIC_SOURCE)),
         )
         session.generation_artifact = artifact.to_dict()
         session.artifact_continuity = ARTIFACT_CONTINUITY_COMPLETE
@@ -1647,6 +1679,8 @@ class InteractionRuntime:
             "mode": session.creation_mode,
             "design_seed": session.design_seed,
             "created_at": session.created_at,
+            "face_aesthetic_profile": str((session.final_design or {}).get("face_aesthetic_profile", DEFAULT_FACE_AESTHETIC_PROFILE)),
+            "face_aesthetic_source": str((session.final_design or {}).get("face_aesthetic_source", DEFAULT_FACE_AESTHETIC_SOURCE)),
         }
 
     @staticmethod
@@ -2299,6 +2333,12 @@ def _message(session: CreativeInteractionSession) -> str:
 def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
     visual = session.resolved_visual_preferences
     firewall = _session_firewall(session)
+    face_selection = resolve_face_aesthetic_profile(
+        visual.get("face_aesthetic_profile"),
+        source=visual.get("face_aesthetic_source"),
+        explicit_user_selection="face_aesthetic_profile" in session.explicit_user_constraints.get("explicit_user_fields", ()),
+        style_inheritance_policy=firewall.style_inheritance_policy,
+    )
     lower_body = {name: visual.get(name) for name in ("exposure_strategy", "legwear_family", "leg_accessory_family", "footwear_family", "foot_visibility", "visual_reason", "relationship_to_character_style", "relationship_to_pose", "repetition_risk")}
     direction = session.selected_art_direction or {}
     identity = session.selected_character_direction or {}
@@ -2311,6 +2351,8 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         "pose_family": design_dna.get("pose_family", visual.get("pose_family", "OPEN_PARALLEL_STANCE")),
         "regional_visual_language": DEFAULT_REGIONAL_VISUAL_LANGUAGE,
         "regional_visual_language_source": "default_style_policy",
+        **face_selection.to_dict(),
+        "face_aesthetic_contract": face_selection.to_dict(),
         "lower_body": lower_body,
         "visual_preferences": visual,
         "design_dna": design_dna,
@@ -2332,6 +2374,9 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         character_visual_style=str(design["character_visual_style"]),
         explicit_user_fields=session.explicit_user_constraints.get("explicit_user_fields", ()),
         soft_intent={"fanservice_level": design["visual_preferences"].get("fanservice_level")},
+        face_aesthetic_profile=face_selection.face_aesthetic_profile,
+        face_aesthetic_source=face_selection.face_aesthetic_source,
+        style_inheritance_policy=face_selection.style_inheritance_policy,
     )
     design["visual_specification_contract"] = visual_contract.to_dict()
     design["prompt_adherence_manifest"] = visual_contract.to_dict()
@@ -2353,8 +2398,10 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         {
             "visual_specification_contract": visual_contract.to_dict(),
             "prompt_adherence_manifest": visual_contract.to_dict(),
+            "face_aesthetic_contract": face_selection.to_dict(),
         }
     )
+    session.face_aesthetic_contract = face_selection.to_dict()
     return design
 
 
@@ -2396,8 +2443,11 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
         "pose_description": final_design.get("pose_description"),
         "pose_family": final_design.get("pose_family"),
         "pose_intent": final_design.get("pose_intent"),
+        "face_aesthetic_profile": final_design.get("face_aesthetic_profile", DEFAULT_FACE_AESTHETIC_PROFILE),
+        "face_aesthetic_source": final_design.get("face_aesthetic_source", DEFAULT_FACE_AESTHETIC_SOURCE),
+        "style_inheritance_policy": final_design.get("style_inheritance_policy", DEFAULT_STYLE_INHERITANCE_POLICY),
         "visual_specification_contract": contract,
-        "visual_context_firewall": {name: deepcopy(final_design.get(name)) for name in ("inherit_previous_visuals", "allowed_visual_inheritance", "blocked_context_sources", "visual_context_firewall_applied")},
+        "visual_context_firewall": {name: deepcopy(final_design.get(name)) for name in ("inherit_previous_visuals", "allowed_visual_inheritance", "blocked_context_sources", "visual_context_firewall_applied", "style_inheritance_policy")},
     }
 
 

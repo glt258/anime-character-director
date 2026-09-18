@@ -130,6 +130,16 @@ class ExplicitConstraintExtractor:
             constraints["constraint_provenance"][name] = "explicit_user"
             prohibit("concept", label or str(value))
 
+        if re.search(r"(?:不要|拒绝|不想要|no)\s*(?:欧美脸(?:型)?|西式脸(?:型)?|western face(?: aesthetics)?)", raw, re.IGNORECASE):
+            positive_field("face_aesthetic_profile", "EAST_ASIAN_COMMERCIAL_GACHA_FACE")
+            constraints["face_aesthetic_source"] = "human_explicit"
+        elif re.search(r"东亚脸型|二游标准脸|日系商业二游脸|亚洲审美|east asian(?: commercial gacha)? face", raw, re.IGNORECASE):
+            positive_field("face_aesthetic_profile", "EAST_ASIAN_COMMERCIAL_GACHA_FACE")
+            constraints["face_aesthetic_source"] = "human_explicit"
+        elif re.search(r"欧美脸型|欧美审美|欧系脸|西方面部骨相|欧式成熟脸|更立体更深邃的五官|western-inspired face|western face aesthetics|more sculpted and deep-set features", raw, re.IGNORECASE):
+            positive_field("face_aesthetic_profile", "WESTERN_INSPIRED_GACHA_FACE")
+            constraints["face_aesthetic_source"] = "human_explicit"
+
         negated_hair_matches = list(re.finditer(rf"{self._NEGATION_PREFIX}{self._HAIR_PATTERN}", raw, re.IGNORECASE))
         for match in negated_hair_matches:
             token = match.group("color")
@@ -277,6 +287,7 @@ class NaturalLanguageInteractionParser:
         "legwear_family": ("黑丝", "丝袜", "连裤袜", "长袜"),
         "fanservice_level": ("性感程度", "性感"),
         "hair_style_family": ("发型",),
+        "face_aesthetic_profile": ("脸型", "面部审美", "五官", "face aesthetic"),
     }
     _COLOR_VALUES = {
         "粉": "pink", "粉色": "pink", "银": "silver", "银白": "silver-white", "银灰": "silver-gray", "灰蓝": "gray-blue",
@@ -510,6 +521,9 @@ class NaturalLanguageInteractionParser:
         match = re.search(r"性感程度\s*(?:改成|换成|为)?\s*(低|中等|高|moderate|low|high)", text, re.IGNORECASE)
         if match:
             put("fanservice_level", {"低": "restrained", "中等": "moderate", "高": "strong", "low": "restrained", "moderate": "moderate", "high": "strong"}.get(match.group(1).lower(), match.group(1)))
+        extracted = ExplicitConstraintExtractor().extract(text)
+        if "face_aesthetic_profile" in extracted:
+            put("face_aesthetic_profile", extracted["face_aesthetic_profile"], source="explicit_user")
         return updates
 
     def _partial_delegate(self, text: str, variables: Mapping[str, Any]) -> dict[str, Any] | None:

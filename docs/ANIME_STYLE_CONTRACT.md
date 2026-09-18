@@ -164,6 +164,10 @@ The default is recorded as `regional_visual_language_source: default_style_polic
 
 Migration records the old artifact version, effective regional value, provenance, timestamp, and whether a later user override occurred. `explicit_user_selection` and `benchmark_delegation` are valid provenance states and are not silently rewritten as human overrides.
 
+### Face Aesthetic Contract
+
+The default face profile is `EAST_ASIAN_COMMERCIAL_GACHA_FACE`, with anime-first abstraction, restrained facial planes, and a commercial gacha presentation. `WESTERN_INSPIRED_GACHA_FACE` and `NEUTRAL_GACHA_FACE` are explicit alternatives. `NO_FACE_AESTHETIC_INHERITANCE` is the default: prior face structure and portrait language may be replayed or checked later, but cannot be positive generation context unless the current user explicitly requests inheritance or a face profile.
+
 ## 11. Lower-Body Visual Design Space
 
 Modesty is not the default solution to character design. Lower-body exposure, hosiery, leg accessories, open footwear, and barefoot designs are valid character-design tools for silhouette, personality, movement, sensuality, elegance, fantasy, and identity. Anti-template rules prevent repetitive sexualization patterns; they must not suppress adult sensual, stylish, or unconventional choices.

@@ -49,6 +49,8 @@
     "allowed_visual_inheritance": {"type": "array", "items": {"type": "string"}},
     "blocked_context_sources": {"type": "array", "items": {"type": "string"}},
     "visual_context_firewall_applied": {"type": "boolean", "const": true},
+    "style_inheritance_policy": {"enum": ["NO_FACE_AESTHETIC_INHERITANCE", "EXPLICIT_FACE_AESTHETIC_INHERITANCE_ONLY"]},
+    "face_aesthetic_contract": {"type": "object"},
     "pending_constraint_updates": {"type": "object"},
     "delegated_fields": {"type": "array", "items": {"type": "string"}},
     "locked_fields": {"type": "object"},
@@ -76,7 +78,9 @@
         "contract_ref": {"type": "string"},
         "mode": {"type": "string"},
         "design_seed": {"type": ["integer", "null"]},
-        "created_at": {"type": "string"}
+        "created_at": {"type": "string"},
+        "face_aesthetic_profile": {"type": "string"},
+        "face_aesthetic_source": {"type": "string"}
       }
     },
     "artifact_continuity": {"enum": ["strict_pending_generation", "strict_complete", "legacy_incomplete"]},

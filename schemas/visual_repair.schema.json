@@ -30,6 +30,7 @@
     "preserve_fields": {"type": "object"},
     "repair_instructions": {"type": "array", "items": {"type": "object"}},
     "anti_regression_constraints": {"type": "array", "items": {"type": "object"}},
-    "max_attempts": {"type": "integer", "minimum": 1}
+    "max_attempts": {"type": "integer", "minimum": 1},
+    "face_aesthetic_contract": {"type": "object"}
   }
 }

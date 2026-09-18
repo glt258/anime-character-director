@@ -10,17 +10,29 @@ from typing import Any
 
 try:
     from .regional_style_runtime import (
+        DEFAULT_FACE_AESTHETIC_PROFILE,
+        DEFAULT_FACE_AESTHETIC_SOURCE,
+        DEFAULT_STYLE_INHERITANCE_POLICY,
         DEFAULT_REGIONAL_VISUAL_LANGUAGE,
+        FaceAestheticProfile,
         RegionalVisualLanguage,
+        migrate_face_aesthetic_fields,
         migrate_regional_style_fields,
+        resolve_face_aesthetic_profile,
     )
     from .leg_separation_runtime import migrate_leg_separation_fields, validate_pose_options
     from .pose_intent_runtime import migrate_pose_intent_fields, normalize_pose_intent_contract, resolve_pose_intent
 except ImportError:  # pragma: no cover - supports direct host imports
     from regional_style_runtime import (  # type: ignore
+        DEFAULT_FACE_AESTHETIC_PROFILE,
+        DEFAULT_FACE_AESTHETIC_SOURCE,
+        DEFAULT_STYLE_INHERITANCE_POLICY,
         DEFAULT_REGIONAL_VISUAL_LANGUAGE,
+        FaceAestheticProfile,
         RegionalVisualLanguage,
+        migrate_face_aesthetic_fields,
         migrate_regional_style_fields,
+        resolve_face_aesthetic_profile,
     )
     from leg_separation_runtime import migrate_leg_separation_fields, validate_pose_options  # type: ignore
     from pose_intent_runtime import migrate_pose_intent_fields, normalize_pose_intent_contract, resolve_pose_intent  # type: ignore
@@ -186,6 +198,15 @@ def validate_sheet(sheet: dict[str, Any]) -> None:
         raise GateError(f"unsupported regional visual language source: {source}")
     if source == "explicit_user_override" and not sheet.get("regional_style_override_reason"):
         raise GateError("regional style override requires a reason")
+    face = sheet.get("face_aesthetic_profile", DEFAULT_FACE_AESTHETIC_PROFILE)
+    try:
+        resolve_face_aesthetic_profile(
+            face,
+            source=sheet.get("face_aesthetic_source", DEFAULT_FACE_AESTHETIC_SOURCE),
+            style_inheritance_policy=sheet.get("style_inheritance_policy", DEFAULT_STYLE_INHERITANCE_POLICY),
+        )
+    except ValueError as error:
+        raise GateError(f"invalid face_aesthetic_profile: {error}") from error
 
 
 def _new_audit(sheet: dict[str, Any]) -> dict[str, Any]:
@@ -201,6 +222,10 @@ def _new_audit(sheet: dict[str, Any]) -> dict[str, Any]:
         "policy": "Human Audit Policy",
         "regional_visual_language": sheet.get("regional_visual_language", DEFAULT_REGIONAL_VISUAL_LANGUAGE),
         "regional_visual_language_source": sheet.get("regional_visual_language_source", "default_style_policy"),
+        "face_aesthetic_contract": deepcopy(sheet.get("face_aesthetic_contract") or {
+            "face_aesthetic_profile": sheet.get("face_aesthetic_profile", DEFAULT_FACE_AESTHETIC_PROFILE),
+            "face_aesthetic_source": sheet.get("face_aesthetic_source", DEFAULT_FACE_AESTHETIC_SOURCE),
+        }),
         "identity_variables": decisions,
         "all_identity_decisions_explicit": all(
             decision["source"] in {"user", "mix", "custom", "ai_delegate"}
@@ -222,6 +247,7 @@ class VisualPreferenceSession:
         leg_migrated_sheet, leg_event = migrate_leg_separation_fields(sheet)
         pose_migrated_sheet, pose_event = migrate_pose_intent_fields(leg_migrated_sheet)
         migrated_sheet, migration_event = migrate_regional_style_fields(pose_migrated_sheet)
+        migrated_sheet, face_event = migrate_face_aesthetic_fields(migrated_sheet)
         validate_sheet(migrated_sheet)
         self.sheet = deepcopy(migrated_sheet)
         if migration_event:
@@ -230,6 +256,8 @@ class VisualPreferenceSession:
             self.history.append(leg_event)
         if pose_event:
             self.history.append(pose_event)
+        if face_event:
+            self.history.append(face_event)
         for item in self.sheet["variables"].values():
             item.setdefault("user_selection", None)
             item.setdefault("selection_source", None)

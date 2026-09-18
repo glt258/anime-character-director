@@ -8,7 +8,7 @@ compares the externally observed follow-up result.
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -127,6 +127,20 @@ def _instruction(target: Mapping[str, Any], locked_fields: Mapping[str, Any]) ->
     required = target.get("required")
     observed = target.get("observed")
     failures = _failure_types(target)
+    if field == "face_aesthetic_profile":
+        text = (
+            f"Restore the face to {required}. Reduce western facial-bone emphasis and prevent semi-realistic western portrait drift. Preserve costume, silhouette, pose, props, palette, and background exactly."
+            if "EAST_ASIAN" in str(required)
+            else f"Restore the face to {required} within contemporary commercial gacha anime. Do not convert the full rendering language into western realistic illustration. Preserve costume, silhouette, pose, props, palette, and background exactly."
+        )
+        return {"field": field, "strategy": "replacement", "text": text, "locked_field_names": sorted(locked_fields)}
+    if field == "facial_style_drift":
+        return {
+            "field": field,
+            "strategy": "strengthen_only",
+            "text": "Correct only facial style drift and restore the contracted face aesthetic. Preserve costume, silhouette, pose, props, palette, and background exactly.",
+            "locked_field_names": sorted(locked_fields),
+        }
     if "TYPE 3" in failures:
         if field == "footwear_category" and "combat boot" in str(required).lower():
             prohibition = "Do not use heels, stilettos, pumps, or generic high heels."
@@ -160,6 +174,7 @@ class VisualRepairPlan:
     source_image_hash: str | None = None
     attempt_id: str = ""
     source_generation_id: str | None = None
+    face_aesthetic_contract: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.repair_attempt < 1:
@@ -186,6 +201,7 @@ class VisualRepairPlan:
             "repair_instructions": deepcopy(list(self.repair_instructions)),
             "anti_regression_constraints": deepcopy(list(self.anti_regression_constraints)),
             "max_attempts": self.max_attempts,
+            "face_aesthetic_contract": deepcopy(self.face_aesthetic_contract),
         }
 
     @classmethod
@@ -204,6 +220,7 @@ class VisualRepairPlan:
             repair_instructions=tuple(deepcopy(data.get("repair_instructions", ()))),
             anti_regression_constraints=tuple(deepcopy(data.get("anti_regression_constraints", ()))),
             max_attempts=int(data.get("max_attempts", MAX_REPAIR_ATTEMPTS)),
+            face_aesthetic_contract=deepcopy(dict(data.get("face_aesthetic_contract") or {})),
         )
 
 
@@ -262,6 +279,8 @@ def build_repair_plan(
     contract = _contract_data(visual_specification_contract)
     manifest_data = _mapping(manifest) if manifest is not None else {}
     hard_sources = [
+        manifest_data.get("face_aesthetic_contract"),
+        contract.get("face_aesthetic_contract"),
         manifest_data.get("hard_constraints"),
         manifest_data.get("pose_specification"),
         manifest_data.get("background_specification"),
@@ -309,6 +328,16 @@ def build_repair_plan(
             elif field in strong_fields and isinstance(result, Mapping) and _result(result.get("result")) == "PASS":
                 preserved[str(field)] = deepcopy(result.get("required"))
     anti_substitution = contract.get("anti_substitution") if isinstance(contract.get("anti_substitution"), Mapping) else {}
+    face_contract = manifest_data.get("face_aesthetic_contract") or contract.get("face_aesthetic_contract") or {
+        name: contract.get(name)
+        for name in (
+            "face_aesthetic_profile",
+            "face_aesthetic_source",
+            "face_aesthetic_guardrails",
+            "style_inheritance_policy",
+        )
+        if contract.get(name) not in (None, "", (), [], {})
+    }
     constraints = [
         {"field": field, "required": deepcopy(value), "rule": "must remain PASS", "strength": "HARD"}
         for field, value in locked.items()
@@ -343,6 +372,7 @@ def build_repair_plan(
         repair_instructions=instructions,
         anti_regression_constraints=tuple(constraints),
         max_attempts=max_attempts,
+        face_aesthetic_contract=deepcopy(dict(face_contract)) if isinstance(face_contract, Mapping) else {},
     )
 
 
@@ -394,8 +424,15 @@ def compile_repair_prompt(
         "## UNCHANGED HARD SPECIFICATION",
         original_prompt,
         "",
-        "## BACKGROUND / POSE SPECIFICATION",
+        "## FACE AESTHETIC CONTRACT",
     ]
+    if repair_plan.face_aesthetic_contract:
+        lines.extend(
+            f"{name}: {value}"
+            for name, value in repair_plan.face_aesthetic_contract.items()
+            if value not in (None, "", (), [], {})
+        )
+    lines.extend(("", "## BACKGROUND / POSE SPECIFICATION"))
     contract = metadata.get("visual_specification_contract")
     if isinstance(contract, Mapping):
         for section in ("pose_specification", "background_specification"):

@@ -71,6 +71,12 @@ Correct: treat it as a fresh visual run. The current positive design evidence is
 
 The existing runtime `VisualContextFirewall.generation_context(...)` is the serialized handoff for `CurrentRunContext`: `current_run_choices` carries current selections and `confirmed_gate_outputs` carries current gate results. Skill orchestration MUST pass this scoped handoff rather than substituting raw conversation history.
 
+## DEFAULT FACE AESTHETIC CONTRACT
+
+Every fresh visual run defaults to `EAST_ASIAN_COMMERCIAL_GACHA_FACE`. The contract is recorded with `face_aesthetic_profile`, `face_aesthetic_is_default`, `face_aesthetic_source`, `face_aesthetic_guardrails`, and `style_inheritance_policy: NO_FACE_AESTHETIC_INHERITANCE`. This is an illustration-language default, not a character-ethnicity rule.
+
+Codex MUST NOT infer current facial preferences from previous runs. Previous face structure, regional face language, portrait treatment, and critic conclusions are historical-only and may enter replay or future anti-repetition analysis, never positive design context. A current request such as “欧美脸型” or “western-inspired face” may explicitly select `WESTERN_INSPIRED_GACHA_FACE`; “沿用上一版的红发” authorizes only the named hair field and does not authorize the old face aesthetic. Every default and western override remains stylized commercial gacha anime and must not drift into western realistic portraiture.
+
 ## HUMAN AUTHORITY CONTRACT
 
 **Codex expands. Human selects.**

@@ -7,6 +7,12 @@
     "regional_visual_language": {"$ref": "#/$defs/regionalVisualLanguage"},
     "regional_visual_language_source": {"$ref": "#/$defs/regionalSource"},
     "regional_style_override_reason": {"type": "string", "minLength": 1},
+    "face_aesthetic_profile": {"$ref": "#/$defs/faceAestheticProfile"},
+    "face_aesthetic_is_default": {"type": "boolean"},
+    "face_aesthetic_source": {"$ref": "#/$defs/faceAestheticSource"},
+    "face_aesthetic_guardrails": {"type": "array", "items": {"type": "string"}},
+    "style_inheritance_policy": {"$ref": "#/$defs/styleInheritancePolicy"},
+    "face_aesthetic_contract": {"$ref": "#/$defs/faceAestheticContract"},
     "lower_body_visual_variables": {"$ref": "#/$defs/lowerBodyDesign"},
     "prompt_bundle": {"$ref": "#/$defs/promptBundle"},
     "regional_style_review": {"$ref": "#/$defs/regionalStyleReview"},
@@ -63,6 +69,31 @@
         "migrated_default"
       ]
     },
+    "faceAestheticProfile": {
+      "enum": ["EAST_ASIAN_COMMERCIAL_GACHA_FACE", "WESTERN_INSPIRED_GACHA_FACE", "NEUTRAL_GACHA_FACE"]
+    },
+    "faceAestheticSource": {
+      "enum": ["system_default", "human_explicit", "delegated_resolution", "migrated_default"]
+    },
+    "styleInheritancePolicy": {
+      "enum": ["NO_FACE_AESTHETIC_INHERITANCE", "EXPLICIT_FACE_AESTHETIC_INHERITANCE_ONLY"]
+    },
+    "faceAestheticContract": {
+      "type": "object",
+      "properties": {
+        "face_aesthetic_profile": {"$ref": "#/$defs/faceAestheticProfile"},
+        "face_aesthetic_is_default": {"type": "boolean"},
+        "face_aesthetic_source": {"$ref": "#/$defs/faceAestheticSource"},
+        "face_aesthetic_guardrails": {"type": "array", "items": {"type": "string"}},
+        "style_inheritance_policy": {"$ref": "#/$defs/styleInheritancePolicy"},
+        "default_face_region_language": {"type": "string"},
+        "facial_structure_bias": {"type": "string"},
+        "facial_style_guardrail": {"type": "string"},
+        "regional_face_language": {"type": "string"},
+        "facial_style_drift": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
     "promptBundle": {
       "type": "object",
       "required": [
@@ -78,6 +109,12 @@
         "rendering_foundation": {"type": "string", "minLength": 1},
         "regional_visual_language": {"$ref": "#/$defs/regionalVisualLanguage"},
         "regional_visual_language_source": {"$ref": "#/$defs/regionalSource"},
+        "face_aesthetic_profile": {"$ref": "#/$defs/faceAestheticProfile"},
+        "face_aesthetic_is_default": {"type": "boolean"},
+        "face_aesthetic_source": {"$ref": "#/$defs/faceAestheticSource"},
+        "face_aesthetic_guardrails": {"type": "array", "items": {"type": "string"}},
+        "style_inheritance_policy": {"$ref": "#/$defs/styleInheritancePolicy"},
+        "face_aesthetic_contract": {"$ref": "#/$defs/faceAestheticContract"},
         "character_visual_style": {"type": "string", "minLength": 1},
         "positive_constraints": {"type": "array", "items": {"type": "string"}},
         "negative_constraints": {"type": "array", "items": {"type": "string"}},
@@ -96,6 +133,12 @@
       "properties": {
         "hard_constraints": {"type": "object", "additionalProperties": {"type": "string"}},
         "strong_preferences": {"type": "object", "additionalProperties": {"type": "string"}},
+        "face_aesthetic_profile": {"$ref": "#/$defs/faceAestheticProfile"},
+        "face_aesthetic_is_default": {"type": "boolean"},
+        "face_aesthetic_source": {"$ref": "#/$defs/faceAestheticSource"},
+        "face_aesthetic_guardrails": {"type": "array", "items": {"type": "string"}},
+        "style_inheritance_policy": {"$ref": "#/$defs/styleInheritancePolicy"},
+        "face_aesthetic_contract": {"$ref": "#/$defs/faceAestheticContract"},
         "soft_intent": {"type": "object", "additionalProperties": {"type": "string"}},
         "anti_substitution": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
         "pose_specification": {

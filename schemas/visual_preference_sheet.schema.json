@@ -26,6 +26,19 @@
         "migrated_default"
       ]
     },
+    "face_aesthetic_profile": {
+      "enum": ["EAST_ASIAN_COMMERCIAL_GACHA_FACE", "WESTERN_INSPIRED_GACHA_FACE", "NEUTRAL_GACHA_FACE"],
+      "default": "EAST_ASIAN_COMMERCIAL_GACHA_FACE"
+    },
+    "face_aesthetic_is_default": {"type": "boolean"},
+    "face_aesthetic_source": {
+      "enum": ["system_default", "human_explicit", "delegated_resolution", "migrated_default"]
+    },
+    "face_aesthetic_guardrails": {"type": "array", "items": {"type": "string"}},
+    "style_inheritance_policy": {
+      "enum": ["NO_FACE_AESTHETIC_INHERITANCE", "EXPLICIT_FACE_AESTHETIC_INHERITANCE_ONLY"]
+    },
+    "face_aesthetic_contract": {"type": "object"},
     "regional_style_override_reason": {"type": "string", "minLength": 1},
     "pose_family": {"type": "string", "minLength": 1},
     "pose_intent": {"$ref": "#/$defs/poseIntentType"},

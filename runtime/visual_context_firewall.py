@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 import re
 from typing import Any, Mapping, Sequence
 
+DEFAULT_STYLE_INHERITANCE_POLICY = "NO_FACE_AESTHETIC_INHERITANCE"
+
 
 DEFAULT_BLOCKED_CONTEXT_SOURCES = (
     "previous_run_character_design",
@@ -14,6 +16,9 @@ DEFAULT_BLOCKED_CONTEXT_SOURCES = (
     "previous_run_image_prompts",
     "previous_run_visual_critic_summary",
     "previous_run_image_description",
+    "previous_run_face_aesthetic",
+    "previous_run_regional_face_language",
+    "previous_run_facial_style_bias",
     "unrequested_historical_visual_features",
 )
 
@@ -37,6 +42,12 @@ _VISUAL_FIELDS = (
     "pose_intent",
     "pose_family",
     "character_visual_style",
+    "face_aesthetic_profile",
+    "facial_bone_structure_bias",
+    "regional_face_language",
+    "semi_realistic_face_bias",
+    "western_face_bias",
+    "east_asian_face_bias",
 )
 
 _HISTORY_REFERENCE = r"(?:上一版|上一张|前一个角色|上一个角色|之前(?:的)?(?:角色|版本|设计|那张)?|previous(?:\s+(?:run|design|character|version|image))?|prior(?:\s+(?:run|design|character|version|image))?|last\s+(?:run|design|character|version|image))"
@@ -55,6 +66,7 @@ class VisualContextFirewall:
     allowed_visual_inheritance: tuple[str, ...] = ()
     blocked_context_sources: tuple[str, ...] = DEFAULT_BLOCKED_CONTEXT_SOURCES
     visual_context_firewall_applied: bool = True
+    style_inheritance_policy: str = DEFAULT_STYLE_INHERITANCE_POLICY
 
     @classmethod
     def from_request(cls, text: str, constraints: Mapping[str, Any] | None = None) -> "VisualContextFirewall":
@@ -83,6 +95,7 @@ class VisualContextFirewall:
             tuple(data.get("allowed_visual_inheritance") or ()),
             tuple(data.get("blocked_context_sources") or DEFAULT_BLOCKED_CONTEXT_SOURCES),
             bool(data.get("visual_context_firewall_applied", True)),
+            str(data.get("style_inheritance_policy", DEFAULT_STYLE_INHERITANCE_POLICY)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -108,6 +121,7 @@ class VisualContextFirewall:
             "allowed_visual_inheritance": list(self.allowed_visual_inheritance),
             "blocked_context_sources": list(self.blocked_context_sources),
             "visual_context_firewall_applied": self.visual_context_firewall_applied,
+            "style_inheritance_policy": self.style_inheritance_policy,
         }
         inherited = self._filter_historical_visuals(historical_visual_context)
         if inherited:

@@ -84,6 +84,24 @@ class RegionalVisualLanguageSource(str, Enum):
     MIGRATED_DEFAULT = "migrated_default"
 
 
+class FaceAestheticProfile(str, Enum):
+    EAST_ASIAN_COMMERCIAL_GACHA_FACE = "EAST_ASIAN_COMMERCIAL_GACHA_FACE"
+    WESTERN_INSPIRED_GACHA_FACE = "WESTERN_INSPIRED_GACHA_FACE"
+    NEUTRAL_GACHA_FACE = "NEUTRAL_GACHA_FACE"
+
+
+class FaceAestheticSource(str, Enum):
+    SYSTEM_DEFAULT = "system_default"
+    HUMAN_EXPLICIT = "human_explicit"
+    DELEGATED_RESOLUTION = "delegated_resolution"
+    MIGRATED_DEFAULT = "migrated_default"
+
+
+class StyleInheritancePolicy(str, Enum):
+    NO_FACE_AESTHETIC_INHERITANCE = "NO_FACE_AESTHETIC_INHERITANCE"
+    EXPLICIT_FACE_AESTHETIC_INHERITANCE_ONLY = "EXPLICIT_FACE_AESTHETIC_INHERITANCE_ONLY"
+
+
 class DriftType(str, Enum):
     WESTERN_ANIME_STYLE_DRIFT = "WESTERN_ANIME_STYLE_DRIFT"
     WESTERN_FANTASY_CONCEPT_DRIFT = "WESTERN_FANTASY_CONCEPT_DRIFT"
@@ -105,6 +123,45 @@ class DriftType(str, Enum):
 
 
 DEFAULT_REGIONAL_VISUAL_LANGUAGE = RegionalVisualLanguage.EAST_ASIAN_CONTEMPORARY_GACHA.value
+DEFAULT_FACE_AESTHETIC_PROFILE = FaceAestheticProfile.EAST_ASIAN_COMMERCIAL_GACHA_FACE.value
+DEFAULT_FACE_AESTHETIC_SOURCE = FaceAestheticSource.SYSTEM_DEFAULT.value
+DEFAULT_STYLE_INHERITANCE_POLICY = StyleInheritancePolicy.NO_FACE_AESTHETIC_INHERITANCE.value
+DEFAULT_FACE_AESTHETIC_GUARDRAILS = (
+    "keep anime-first facial abstraction and restrained facial planes",
+    "do not drift toward western facial structure or semi-realistic western portrait language",
+)
+FACE_AESTHETIC_CONTRACTS: dict[str, dict[str, Any]] = {
+    DEFAULT_FACE_AESTHETIC_PROFILE: {
+        "default_face_region_language": "East Asian commercial gacha anime facial design language",
+        "facial_structure_bias": "anime-first facial abstraction, restrained facial planes, clean graphic jaw/chin construction",
+        "facial_style_guardrail": "Do not drift toward western facial structure, western illustration-style facial treatment, comic-book facial design, or semi-realistic western portrait language / European-American fantasy portrait language.",
+        "regional_face_language": DEFAULT_FACE_AESTHETIC_PROFILE,
+        "facial_style_drift": "NONE",
+        "guardrails": DEFAULT_FACE_AESTHETIC_GUARDRAILS,
+    },
+    FaceAestheticProfile.WESTERN_INSPIRED_GACHA_FACE.value: {
+        "default_face_region_language": "western-inspired face aesthetics within contemporary commercial gacha anime",
+        "facial_structure_bias": "stylized western-inspired facial structure with controlled planes and commercial gacha simplification",
+        "facial_style_guardrail": "Keep the same stylized anime-first commercial gacha medium; do not convert the full rendering language into western realistic illustration, western comic-book art, or semi-realistic fantasy portraiture.",
+        "regional_face_language": FaceAestheticProfile.WESTERN_INSPIRED_GACHA_FACE.value,
+        "facial_style_drift": "NONE",
+        "guardrails": (
+            "remain within contemporary commercial gacha anime",
+            "do not become western realistic illustration or semi-realistic fantasy portraiture",
+        ),
+    },
+    FaceAestheticProfile.NEUTRAL_GACHA_FACE.value: {
+        "default_face_region_language": "region-neutral commercial gacha anime facial design language",
+        "facial_structure_bias": "stylized anime-first facial abstraction with balanced, non-regionalized facial planes",
+        "facial_style_guardrail": "Avoid photorealistic portrait anatomy and avoid drifting into a specific western realistic illustration language.",
+        "regional_face_language": FaceAestheticProfile.NEUTRAL_GACHA_FACE.value,
+        "facial_style_drift": "NONE",
+        "guardrails": (
+            "remain stylized anime-first commercial gacha",
+            "avoid photorealistic portrait anatomy",
+        ),
+    },
+}
 DRIFT_LEVELS = ("NONE", "LOW", "MEDIUM", "HIGH")
 REGIONAL_MATCHES = ("STRONG", "ACCEPTABLE", "WEAK", "FAIL")
 OUTFIT_FEATURES = (
@@ -246,6 +303,11 @@ FOOTWEAR_FAMILIES = (
 DEFAULT_REGIONAL_STYLE_POLICY: dict[str, Any] = {
     "default": DEFAULT_REGIONAL_VISUAL_LANGUAGE,
     "allow_user_override": True,
+    "face_aesthetic": {
+        "default": DEFAULT_FACE_AESTHETIC_PROFILE,
+        "inheritance_policy": DEFAULT_STYLE_INHERITANCE_POLICY,
+        "contracts": deepcopy(FACE_AESTHETIC_CONTRACTS),
+    },
     "contracts": {
         DEFAULT_REGIONAL_VISUAL_LANGUAGE: {
             "positive": (
@@ -433,6 +495,12 @@ class VisualSpecificationContract:
     schema_version: str = "1.0.0"
     pose_specification: dict[str, str] = field(default_factory=dict)
     background_specification: dict[str, str] = field(default_factory=dict)
+    face_aesthetic_profile: str = DEFAULT_FACE_AESTHETIC_PROFILE
+    face_aesthetic_is_default: bool = True
+    face_aesthetic_source: str = DEFAULT_FACE_AESTHETIC_SOURCE
+    face_aesthetic_guardrails: tuple[str, ...] = DEFAULT_FACE_AESTHETIC_GUARDRAILS
+    style_inheritance_policy: str = DEFAULT_STYLE_INHERITANCE_POLICY
+    face_aesthetic_contract: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         data = deepcopy(asdict(self))
@@ -441,6 +509,11 @@ class VisualSpecificationContract:
         }
         data["explicit_hard_fields"] = list(self.explicit_hard_fields)
         data["priority_order"] = list(self.priority_order)
+        data["face_aesthetic_guardrails"] = list(self.face_aesthetic_guardrails)
+        if isinstance(data.get("face_aesthetic_contract"), dict):
+            data["face_aesthetic_contract"]["face_aesthetic_guardrails"] = list(
+                data["face_aesthetic_contract"].get("face_aesthetic_guardrails", ())
+            )
         return data
 
 
@@ -451,11 +524,23 @@ def build_visual_specification_contract(
     character_visual_style: str = "",
     explicit_user_fields: Sequence[str] = (),
     soft_intent: Mapping[str, Any] | None = None,
+    face_aesthetic_profile: str | None = None,
+    face_aesthetic_source: str | None = None,
+    style_inheritance_policy: str | None = None,
 ) -> VisualSpecificationContract:
     """Build a general contract without using archetype-specific defaults."""
     dna = dict(design_dna or {})
     visual = dict(visual_preferences or {})
     explicit = set(str(name) for name in explicit_user_fields)
+    requested_face = face_aesthetic_profile or visual.get("face_aesthetic_profile")
+    requested_face_source = face_aesthetic_source or visual.get("face_aesthetic_source")
+    if requested_face and requested_face_source is None and "face_aesthetic_profile" in explicit:
+        requested_face_source = FaceAestheticSource.HUMAN_EXPLICIT.value
+    face_selection = resolve_face_aesthetic_profile(
+        requested_face,
+        source=requested_face_source,
+        explicit_user_selection="face_aesthetic_profile" in explicit,
+    )
     hard: dict[str, Any] = {}
     explicit_hard: list[str] = []
 
@@ -524,6 +609,7 @@ def build_visual_specification_contract(
     for name in explicit:
         if name not in mapped_user_fields and _nonempty(visual.get(name)):
             strong[name] = str(visual[name])
+    strong["face_aesthetic_profile"] = face_selection.face_aesthetic_profile
 
     soft = {
         str(name): str(value)
@@ -538,6 +624,12 @@ def build_visual_specification_contract(
         explicit_hard_fields=tuple(dict.fromkeys(explicit_hard)),
         pose_specification=pose_specification,
         background_specification=background_specification,
+        face_aesthetic_profile=face_selection.face_aesthetic_profile,
+        face_aesthetic_is_default=face_selection.face_aesthetic_is_default,
+        face_aesthetic_source=face_selection.face_aesthetic_source,
+        face_aesthetic_guardrails=face_selection.face_aesthetic_guardrails,
+        style_inheritance_policy=style_inheritance_policy or DEFAULT_STYLE_INHERITANCE_POLICY,
+        face_aesthetic_contract=face_selection.to_dict(),
     )
 
 
@@ -574,6 +666,12 @@ def _normalize_visual_specification_contract(
         schema_version=str(data.get("schema_version", "1.0.0")),
         pose_specification=pose_specification,
         background_specification=background_specification,
+        face_aesthetic_profile=str(data.get("face_aesthetic_profile", DEFAULT_FACE_AESTHETIC_PROFILE)),
+        face_aesthetic_is_default=bool(data.get("face_aesthetic_is_default", True)),
+        face_aesthetic_source=str(data.get("face_aesthetic_source", FaceAestheticSource.MIGRATED_DEFAULT.value)),
+        face_aesthetic_guardrails=tuple(str(item) for item in data.get("face_aesthetic_guardrails", DEFAULT_FACE_AESTHETIC_GUARDRAILS)),
+        style_inheritance_policy=str(data.get("style_inheritance_policy", DEFAULT_STYLE_INHERITANCE_POLICY)),
+        face_aesthetic_contract=deepcopy(dict(data.get("face_aesthetic_contract") or {})),
     )
 
 
@@ -763,6 +861,107 @@ def migrate_regional_style_fields(
     return migrated, event
 
 
+@dataclass(frozen=True)
+class FaceAestheticSelection:
+    face_aesthetic_profile: str
+    face_aesthetic_is_default: bool
+    face_aesthetic_source: str
+    face_aesthetic_guardrails: tuple[str, ...]
+    style_inheritance_policy: str = DEFAULT_STYLE_INHERITANCE_POLICY
+    default_face_region_language: str = ""
+    facial_structure_bias: str = ""
+    facial_style_guardrail: str = ""
+    regional_face_language: str = ""
+    facial_style_drift: str = "NONE"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def resolve_face_aesthetic_profile(
+    requested: str | FaceAestheticProfile | None = None,
+    *,
+    source: str | FaceAestheticSource | None = None,
+    explicit_user_selection: bool = False,
+    migrated_default: bool = False,
+    style_inheritance_policy: str | None = None,
+) -> FaceAestheticSelection:
+    source_value = source.value if isinstance(source, FaceAestheticSource) else source
+    if explicit_user_selection:
+        source_value = FaceAestheticSource.HUMAN_EXPLICIT.value
+    if migrated_default:
+        source_value = FaceAestheticSource.MIGRATED_DEFAULT.value
+    allowed_sources = {item.value for item in FaceAestheticSource}
+    if source_value is not None and source_value not in allowed_sources:
+        raise RegionalStyleError(f"unsupported face aesthetic source: {source_value}")
+    profile = (
+        requested.value if isinstance(requested, FaceAestheticProfile) else str(requested)
+        if requested is not None
+        else DEFAULT_FACE_AESTHETIC_PROFILE
+    )
+    if profile not in FACE_AESTHETIC_CONTRACTS:
+        raise RegionalStyleError(f"unsupported face aesthetic profile: {profile}")
+    if source_value is None:
+        source_value = (
+            FaceAestheticSource.SYSTEM_DEFAULT.value
+            if profile == DEFAULT_FACE_AESTHETIC_PROFILE
+            else FaceAestheticSource.DELEGATED_RESOLUTION.value
+        )
+    if profile != DEFAULT_FACE_AESTHETIC_PROFILE and source_value not in {
+        FaceAestheticSource.HUMAN_EXPLICIT.value,
+        FaceAestheticSource.DELEGATED_RESOLUTION.value,
+    }:
+        raise RegionalStyleError("non-default face aesthetic profile requires explicit or delegated resolution")
+    contract = FACE_AESTHETIC_CONTRACTS[profile]
+    return FaceAestheticSelection(
+        profile,
+        profile == DEFAULT_FACE_AESTHETIC_PROFILE and source_value in {
+            FaceAestheticSource.SYSTEM_DEFAULT.value,
+            FaceAestheticSource.MIGRATED_DEFAULT.value,
+        },
+        source_value,
+        tuple(contract["guardrails"]),
+        style_inheritance_policy or DEFAULT_STYLE_INHERITANCE_POLICY,
+        str(contract["default_face_region_language"]),
+        str(contract["facial_structure_bias"]),
+        str(contract["facial_style_guardrail"]),
+        str(contract["regional_face_language"]),
+        str(contract["facial_style_drift"]),
+    )
+
+
+def migrate_face_aesthetic_fields(
+    artifact: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Add the current face contract in memory without rewriting old artifacts."""
+    migrated = deepcopy(dict(artifact))
+    has_profile = "face_aesthetic_profile" in migrated
+    has_contract = isinstance(migrated.get("face_aesthetic_contract"), Mapping)
+    if has_profile and has_contract:
+        return migrated, None
+    existing_profile = migrated.get("face_aesthetic_profile")
+    selection = resolve_face_aesthetic_profile(
+        existing_profile,
+        source=migrated.get("face_aesthetic_source") or (
+            FaceAestheticSource.DELEGATED_RESOLUTION.value
+            if existing_profile and existing_profile != DEFAULT_FACE_AESTHETIC_PROFILE
+            else None
+        ),
+        migrated_default=not existing_profile,
+    )
+    migrated.update(selection.to_dict())
+    migrated["face_aesthetic_contract"] = selection.to_dict()
+    event = {
+        "event": "face_aesthetic_migration",
+        "audit_event": "FACE_AESTHETIC_DEFAULT_MIGRATION",
+        "old_artifact_version": migrated.get("schema_version", "unknown"),
+        "new_effective_value": selection.face_aesthetic_profile,
+        "source": selection.face_aesthetic_source,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    return migrated, event
+
+
 def load_style_policy(path: str | Path) -> dict[str, Any]:
     """Load the YAML policy at the host boundary; the runtime default stays dependency-free."""
     try:
@@ -790,6 +989,13 @@ def load_style_policy(path: str | Path) -> dict[str, Any]:
         policy["lower_body"].update(data["lower_body_visual_language"])
     if isinstance(data.get("pose_constraints"), dict):
         policy["pose_constraints"].update(data["pose_constraints"])
+    face_policy = data.get("face_aesthetic")
+    if isinstance(face_policy, dict):
+        policy["face_aesthetic"].update(
+            {key: value for key, value in face_policy.items() if key != "contracts"}
+        )
+        if isinstance(face_policy.get("contracts"), dict):
+            policy["face_aesthetic"]["contracts"].update(deepcopy(face_policy["contracts"]))
     return policy
 
 
@@ -982,9 +1188,28 @@ class PromptBundle:
     visual_context_firewall_applied: bool = True
     visual_specification_contract: dict[str, Any] = field(default_factory=dict)
     prompt_adherence_manifest: dict[str, Any] = field(default_factory=dict)
+    face_aesthetic_profile: str = DEFAULT_FACE_AESTHETIC_PROFILE
+    face_aesthetic_is_default: bool = True
+    face_aesthetic_source: str = DEFAULT_FACE_AESTHETIC_SOURCE
+    face_aesthetic_guardrails: tuple[str, ...] = DEFAULT_FACE_AESTHETIC_GUARDRAILS
+    style_inheritance_policy: str = DEFAULT_STYLE_INHERITANCE_POLICY
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        for name in (
+            "positive_constraints",
+            "negative_constraints",
+            "lower_body_constraints",
+            "leg_geometry_constraints",
+            "face_aesthetic_guardrails",
+        ):
+            data[name] = list(data[name])
+        pose_contract = data.get("pose_intent_contract")
+        if isinstance(pose_contract, dict):
+            for name in ("required_body_signals", "forbidden_shortcuts"):
+                if name in pose_contract:
+                    pose_contract[name] = list(pose_contract[name])
+        return data
 
 
 class PromptCompiler:
@@ -1014,6 +1239,9 @@ class PromptCompiler:
         visual_context_firewall: Mapping[str, Any] | VisualContextFirewall | None = None,
         visual_specification_contract: Mapping[str, Any] | VisualSpecificationContract | None = None,
         positive_prompt_fragment: str | None = None,
+        face_aesthetic_profile: str | FaceAestheticProfile | None = None,
+        face_aesthetic_source: str | FaceAestheticSource | None = None,
+        style_inheritance_policy: str | None = None,
     ) -> PromptBundle:
         firewall = VisualContextFirewall.from_metadata(visual_context_firewall)
         if not firewall.visual_context_firewall_applied:
@@ -1072,6 +1300,11 @@ class PromptCompiler:
             review_lower_body_design(lower_body, age_group=age_group, fanservice_level=fanservice_level)
             lower_body_constraints = _lower_body_prompt_lines(lower_body_variables)
         visual_contract = _normalize_visual_specification_contract(visual_specification_contract)
+        face_selection = resolve_face_aesthetic_profile(
+            visual_contract.face_aesthetic_profile if visual_contract is not None else face_aesthetic_profile,
+            source=(visual_contract.face_aesthetic_source if visual_contract is not None else face_aesthetic_source),
+            style_inheritance_policy=(visual_contract.style_inheritance_policy if visual_contract is not None else style_inheritance_policy),
+        )
         prompt_lines = [
             "## GLOBAL RENDERING MEDIUM",
             "## Rendering Foundation",
@@ -1081,6 +1314,13 @@ class PromptCompiler:
             "## Regional Visual Language",
             selection.regional_visual_language,
             *positive,
+            "",
+            "## FACE AESTHETIC CONTRACT",
+            f"Face Aesthetic Profile: {face_selection.face_aesthetic_profile}",
+            f"Default Face Region Language: {face_selection.default_face_region_language}",
+            f"Facial Structure Bias: {face_selection.facial_structure_bias}",
+            f"Facial Style Guardrail: {face_selection.facial_style_guardrail}",
+            f"Style Inheritance Policy: {face_selection.style_inheritance_policy}",
             "",
             "## CHARACTER VISUAL STYLE",
             "## Character Visual Style",
@@ -1246,6 +1486,11 @@ class PromptCompiler:
             firewall.visual_context_firewall_applied,
             visual_contract.to_dict() if visual_contract is not None else {},
             visual_contract.to_dict() if visual_contract is not None else {},
+            face_aesthetic_profile=face_selection.face_aesthetic_profile,
+            face_aesthetic_is_default=face_selection.face_aesthetic_is_default,
+            face_aesthetic_source=face_selection.face_aesthetic_source,
+            face_aesthetic_guardrails=face_selection.face_aesthetic_guardrails,
+            style_inheritance_policy=face_selection.style_inheritance_policy,
         )
 
 

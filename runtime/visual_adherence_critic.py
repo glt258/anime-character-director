@@ -18,6 +18,9 @@ RESULTS = ("PASS", "PARTIAL", "FAIL", "NOT_EVALUABLE")
 ANATOMY_RESULTS = ("PASS", "FAIL", "NOT_EVALUABLE")
 
 TIER1_FIELDS = (
+    "face_aesthetic_profile",
+    "facial_style_drift",
+    "regional_face_language",
     "hair_color",
     "hair_structure",
     "horn_topology",
@@ -124,6 +127,12 @@ def _default_failure_type(field: str, result: str) -> str | None:
         return None
     if result == "PARTIAL":
         return "TYPE 4"
+    if field in {
+        "facial_style_drift",
+        "face_aesthetic_profile",
+        "regional_face_language",
+    }:
+        return "TYPE 3"
     if field in {
         "lower_body_pose",
         "torso_orientation",
@@ -239,19 +248,27 @@ class VisualAdherenceCritic:
         metadata = _as_mapping(prompt_bundle_metadata) if prompt_bundle_metadata is not None else {}
 
         sources = (
+            manifest_data.get("face_aesthetic_contract"),
+            manifest_data,
             manifest_data.get("hard_constraints"),
             manifest_data.get("strong_preferences"),
             manifest_data.get("pose_specification"),
             manifest_data.get("background_specification"),
         )
         required: dict[str, Any] = {}
+        labeled_fields = observation_data.get("field_results")
+        face_observation_requested = any(
+            name in observation_data or (isinstance(labeled_fields, Mapping) and name in labeled_fields)
+            for name in ("facial_style_drift", "regional_face_language")
+        )
         for source in sources:
             if isinstance(source, Mapping):
                 for name in TIER1_FIELDS:
+                    if name in {"facial_style_drift", "regional_face_language"} and not face_observation_requested:
+                        continue
                     if name not in required and _nonempty(source.get(name)):
                         required[name] = deepcopy(source[name])
 
-        labeled_fields = observation_data.get("field_results")
         top_level_failures = observation_data.get("failure_types", {})
         field_results: dict[str, dict[str, Any]] = {}
         failure_types: list[str] = []

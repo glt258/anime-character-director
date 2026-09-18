@@ -31,6 +31,10 @@ Each new run is a fresh visual run and sets `inherit_previous_visuals = false`. 
 
 Do not infer current visual preferences from previous runs. In `USER_DECIDE`, an unselected field stays unselected or AI-proposed according to the current gate; history cannot fill it. Only an explicit current request such as “沿用上一版的红发” or “参考上一版整体设计做一个变体” enables inheritance. The first authorizes only the named hair-color field; the second authorizes the explicitly requested overall variation. Unspecified historical visuals remain blocked, and the forbidden path is `history → Codex reasoning → new visual choice`.
 
+### Face Aesthetic Contract
+
+Fresh runs use `EAST_ASIAN_COMMERCIAL_GACHA_FACE` by default and record the profile, source, guardrails, and `NO_FACE_AESTHETIC_INHERITANCE` policy in the current-run contract. Previous facial structure or regional face language is excluded from designer, Visual Preference, and PromptCompiler inputs. A current explicit face request may select `WESTERN_INSPIRED_GACHA_FACE` or `NEUTRAL_GACHA_FACE`; historical face information otherwise remains replay/anti-repetition data only.
+
 ## Cross-run Novelty Guard
 
 After `FINAL_DESIGN` is assembled and before `PROMPT_COMPILATION`, `NoveltyGuard` compares the current structured `DesignSignature` with a configurable recent snapshot of completed fresh runs. This is post-design evaluation, not positive context: history contains no prompt, chat text, image description, or critic prose and cannot flow into Character Direction, Art Direction, Visual Preference, PromptCompiler, or repair prompts. Structural fields outweigh cosmetic fields, so recoloring alone fails while a structurally different design in the same archetype can pass. Explicit inheritance/variation is `EXEMPT`; QUICK uses a deterministic alternate, AI_DECIDE filters collision candidates after quality validation, and USER_DECIDE preserves Human choices with an auditable override. Repair attempts never add another signature, and replay reuses the saved snapshot.
