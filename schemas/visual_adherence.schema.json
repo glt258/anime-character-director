@@ -4,6 +4,58 @@
   "title": "VisualAdherenceReview",
   "type": "object",
   "additionalProperties": false,
+  "$defs": {
+    "repairTarget": {
+      "type": "object",
+      "required": ["field", "ownership", "repair_importance", "repair_risk", "auto_repair_eligible"],
+      "properties": {
+        "field": {"type": "string", "minLength": 1},
+        "ownership": {"enum": ["HUMAN_EXPLICIT", "HUMAN_SELECTION", "SYSTEM_INVARIANT", "AI_RESOLVED", "SYSTEM_DEFAULT"]},
+        "repair_importance": {"enum": ["CRITICAL", "MAJOR", "MINOR", "INFORMATIONAL"]},
+        "repair_risk": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+        "auto_repair_eligible": {"type": "boolean"},
+        "manual_repair_available": {"type": "boolean"},
+        "manual_repair_requested": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "repairTriggerDecision": {
+      "type": "object",
+      "required": ["disposition", "repair_required", "auto_repair_eligible", "manual_repair_available", "actionable_repair_targets", "informational_deviations"],
+      "properties": {
+        "disposition": {"enum": ["ACCEPT", "ACCEPT_WITH_DEVIATIONS", "REPAIR_RECOMMENDED", "REPAIR_REQUIRED", "BLOCKED"]},
+        "repair_required": {"type": "boolean"},
+        "auto_repair_eligible": {"type": "boolean"},
+        "manual_repair_available": {"type": "boolean"},
+        "repair_risk": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+        "actionable_repair_targets": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}},
+        "informational_deviations": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}}
+      },
+      "additionalProperties": false
+    },
+    "adherenceDisposition": {
+      "type": "object",
+      "required": ["strict_overall_result", "human_constraint_result", "system_invariant_result", "ai_design_fidelity_result", "disposition", "repair_required", "auto_repair_eligible", "actionable_repair_targets", "informational_deviations", "repair_trigger_decision"],
+      "properties": {
+        "strict_overall_result": {"enum": ["PASS", "PARTIAL", "FAIL", "NOT_EVALUABLE"]},
+        "human_constraint_result": {"type": "string"},
+        "system_invariant_result": {"type": "string"},
+        "ai_design_fidelity_result": {"type": "string"},
+        "blocking_failures": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}},
+        "nonblocking_failures": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}},
+        "repair_required": {"type": "boolean"},
+        "auto_repair_eligible": {"type": "boolean"},
+        "manual_repair_available": {"type": "boolean"},
+        "repair_risk": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+        "actionable_repair_targets": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}},
+        "informational_deviations": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}},
+        "disposition": {"enum": ["ACCEPT", "ACCEPT_WITH_DEVIATIONS", "REPAIR_RECOMMENDED", "REPAIR_REQUIRED", "BLOCKED"]},
+        "disposition_source": {"type": "string"},
+        "repair_trigger_decision": {"$ref": "#/$defs/repairTriggerDecision"}
+      },
+      "additionalProperties": false
+    }
+  },
   "required": [
     "actual_image",
     "overall_result",
@@ -52,6 +104,8 @@
     "manifest_fields": {"type": "array", "items": {"type": "string"}},
     "actual_image_hash": {"type": ["string", "null"]},
     "review_id": {"type": ["string", "null"]},
-    "generation_id": {"type": ["string", "null"]}
+    "generation_id": {"type": ["string", "null"]},
+    "adherence_disposition": {"anyOf": [{"$ref": "#/$defs/adherenceDisposition"}, {"type": "null"}]},
+    "repair_trigger_decision": {"anyOf": [{"$ref": "#/$defs/repairTriggerDecision"}, {"type": "null"}]}
   }
 }

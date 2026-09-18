@@ -8,7 +8,7 @@ from enum import Enum
 import json
 from pathlib import Path
 import re
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 from uuid import uuid4
 
 try:
@@ -748,9 +748,15 @@ class PersistentWorkflowRunner:
         *,
         max_attempts: int = 2,
         include_minor: bool = True,
+        manual_repair_fields: Sequence[str] = (),
     ) -> dict[str, Any]:
         run = self._load_run(run_id)
-        result = self.runtime.build_visual_repair_plan(run.session_id, max_attempts=max_attempts, include_minor=include_minor)
+        result = self.runtime.build_visual_repair_plan(
+            run.session_id,
+            max_attempts=max_attempts,
+            include_minor=include_minor,
+            manual_repair_fields=manual_repair_fields,
+        )
         run.status = str(result.get("status", run.status))
         self._save_run(run)
         return result
@@ -829,6 +835,22 @@ def record_visual_adherence_review(
     )
 
 
+def build_visual_repair_plan(
+    session_root: str | Path,
+    run_id: str,
+    *,
+    max_attempts: int = 2,
+    include_minor: bool = True,
+    manual_repair_fields: Sequence[str] = (),
+) -> dict[str, Any]:
+    return PersistentWorkflowRunner(session_root).build_visual_repair_plan(
+        run_id,
+        max_attempts=max_attempts,
+        include_minor=include_minor,
+        manual_repair_fields=manual_repair_fields,
+    )
+
+
 def record_generation_artifact(
     session_root: str | Path,
     run_id: str,
@@ -843,16 +865,6 @@ def record_generation_artifact(
         generation_id=generation_id,
         prompt_hash=prompt_hash,
     )
-
-
-def build_visual_repair_plan(
-    session_root: str | Path,
-    run_id: str,
-    *,
-    max_attempts: int = 2,
-    include_minor: bool = True,
-) -> dict[str, Any]:
-    return PersistentWorkflowRunner(session_root).build_visual_repair_plan(run_id, max_attempts=max_attempts, include_minor=include_minor)
 
 
 def record_visual_repair_generation(

@@ -4,6 +4,20 @@
   "title": "VisualRepairPlan",
   "type": "object",
   "additionalProperties": false,
+  "$defs": {
+    "repairTarget": {
+      "type": "object",
+      "required": ["field"],
+      "properties": {
+        "field": {"type": "string", "minLength": 1},
+        "ownership": {"enum": ["HUMAN_EXPLICIT", "HUMAN_SELECTION", "SYSTEM_INVARIANT", "AI_RESOLVED", "SYSTEM_DEFAULT"]},
+        "repair_importance": {"enum": ["CRITICAL", "MAJOR", "MINOR", "INFORMATIONAL"]},
+        "repair_risk": {"enum": ["LOW", "MEDIUM", "HIGH"]},
+        "auto_repair_eligible": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    }
+  },
   "required": [
     "source_image",
     "source_prompt_hash",
@@ -25,12 +39,16 @@
     "source_review_id": {"type": "string", "minLength": 1},
     "repair_attempt": {"type": "integer", "minimum": 1},
     "attempt_id": {"type": "string", "minLength": 1},
-    "repair_targets": {"type": "array", "items": {"type": "object"}},
+    "repair_targets": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}},
     "locked_fields": {"type": "object"},
     "preserve_fields": {"type": "object"},
     "repair_instructions": {"type": "array", "items": {"type": "object"}},
     "anti_regression_constraints": {"type": "array", "items": {"type": "object"}},
     "max_attempts": {"type": "integer", "minimum": 1},
-    "face_aesthetic_contract": {"type": "object"}
+    "face_aesthetic_contract": {"type": "object"},
+    "actionable_repair_targets": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}},
+    "informational_deviations": {"type": "array", "items": {"$ref": "#/$defs/repairTarget"}},
+    "adherence_disposition": {"type": ["object", "null"]},
+    "repair_trigger_decision": {"type": ["object", "null"]}
   }
 }

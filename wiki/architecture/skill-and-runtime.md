@@ -16,6 +16,8 @@ The Skill owns orchestration, evidence boundaries, checkpoints, and user-facing 
 
 Post-generation adherence is a separate reporting seam. `VisualAdherenceCritic` consumes an actual image plus the persisted `PromptAdherenceManifest` and labeled observations, then persists a stable field/anatomy report through `InteractionRuntime.record_visual_adherence_review`. It is detection-only: no prompt rewrite, DesignDNA mutation, regeneration, best-of-N, or similarity scoring.
 
+Repair disposition is intentionally separate from strict adherence truth: `VisualAdherenceCritic → AdherenceDispositionPolicy → RepairTriggerDecision → actionable_repair_targets → VisualRepairPlan`. `overall_result` remains strict design fidelity. Ownership and repair importance are orthogonal: `HUMAN_EXPLICIT` / `HUMAN_SELECTION` failures can require repair, `SYSTEM_INVARIANT` failures can require repair, while `AI_RESOLVED` / `SYSTEM_DEFAULT` deviations remain review-visible without automatic repair by default. Disposition and actionable targets are persisted for replay; explicit user repair requests may promote an informational target.
+
 Generation is blocked when required planning, lock, identity, or review checkpoints are not satisfied.
 
 Global Rendering Style is a runtime-owned default: `CONTEMPORARY_COMMERCIAL_GACHA_ANIME`. Character Visual Style remains character-owned design language and cannot replace the rendering medium unless the user explicitly supplies a rendering override. S1 checks the anime 2D medium; Gacha checks commercial playable-character rendering and presentation; the two reports remain separate.

@@ -182,6 +182,8 @@ class VisualAdherenceReview:
     actual_image_hash: str | None = None
     review_id: str | None = None
     generation_id: str | None = None
+    adherence_disposition: dict[str, Any] | None = None
+    repair_trigger_decision: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -199,6 +201,8 @@ class VisualAdherenceReview:
             "actual_image_hash": self.actual_image_hash,
             "review_id": self.review_id,
             "generation_id": self.generation_id,
+            "adherence_disposition": deepcopy(self.adherence_disposition),
+            "repair_trigger_decision": deepcopy(self.repair_trigger_decision),
         }
 
     @classmethod
@@ -218,6 +222,8 @@ class VisualAdherenceReview:
             data.get("actual_image_hash"),
             data.get("review_id"),
             data.get("generation_id"),
+            deepcopy(dict(data.get("adherence_disposition") or {})) if data.get("adherence_disposition") is not None else None,
+            deepcopy(dict(data.get("repair_trigger_decision") or {})) if data.get("repair_trigger_decision") is not None else None,
         )
 
 

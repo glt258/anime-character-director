@@ -21,6 +21,10 @@ def _firewall() -> dict[str, object]:
 
 def test_default_face_contract_is_east_asian_and_compiled() -> None:
     contract = build_visual_specification_contract(character_visual_style="clean-line anime")
+    contract_data = contract.to_dict()
+    contract_data["field_metadata"] = {
+        "face_aesthetic_profile": {"ownership": "SYSTEM_INVARIANT"},
+    }
     bundle = PromptCompiler().compile(
         character_visual_style="clean-line anime",
         visual_specification_contract=contract,
@@ -103,6 +107,10 @@ def test_critic_and_repair_preserve_face_contract(tmp_path) -> None:
     image = tmp_path / "image.png"
     image.write_bytes(b"fixture")
     contract = build_visual_specification_contract(character_visual_style="clean-line anime")
+    contract_data = contract.to_dict()
+    contract_data["field_metadata"] = {
+        "face_aesthetic_profile": {"ownership": "SYSTEM_INVARIANT"},
+    }
     prompt = PromptCompiler().compile(
         character_visual_style="clean-line anime",
         visual_specification_contract=contract,
@@ -110,7 +118,7 @@ def test_critic_and_repair_preserve_face_contract(tmp_path) -> None:
     ).prompt
     review = VisualAdherenceCritic().review(
         image,
-        manifest=contract.to_dict(),
+        manifest=contract_data,
         observations={
             "face_aesthetic_profile": {
                 "observed": "WESTERN_INSPIRED_GACHA_FACE",
@@ -123,8 +131,8 @@ def test_critic_and_repair_preserve_face_contract(tmp_path) -> None:
     )
     plan = build_repair_plan(
         review,
-        manifest=contract.to_dict(),
-        visual_specification_contract=contract.to_dict(),
+        manifest=contract_data,
+        visual_specification_contract=contract_data,
         generation_artifact={
             "generation_id": "generation-1",
             "image_hash": review.actual_image_hash,

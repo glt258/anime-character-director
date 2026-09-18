@@ -12,16 +12,18 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 try:
+    from .adherence_policy import evaluate_adherence_disposition
     from .visual_adherence_critic import RESULTS, VisualAdherenceReview
 except ImportError:  # pragma: no cover - supports direct host imports
+    from adherence_policy import evaluate_adherence_disposition  # type: ignore
     from visual_adherence_critic import RESULTS, VisualAdherenceReview  # type: ignore
 
 
 MAX_REPAIR_ATTEMPTS = 2
-REPAIR_SEVERITIES = ("CRITICAL", "MAJOR", "MINOR", "IGNORE")
+REPAIR_SEVERITIES = ("CRITICAL", "MAJOR", "MINOR", "INFORMATIONAL", "IGNORE")
 REPAIR_OUTCOMES = ("SUCCESS", "PARTIAL_SUCCESS", "NO_IMPROVEMENT", "REGRESSION", "FAILED")
 REPAIR_STATUSES = (
     "GENERATION_READY",
@@ -175,6 +177,10 @@ class VisualRepairPlan:
     attempt_id: str = ""
     source_generation_id: str | None = None
     face_aesthetic_contract: dict[str, Any] = field(default_factory=dict)
+    actionable_repair_targets: tuple[dict[str, Any], ...] = ()
+    informational_deviations: tuple[dict[str, Any], ...] = ()
+    adherence_disposition: dict[str, Any] | None = None
+    repair_trigger_decision: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.repair_attempt < 1:
@@ -202,6 +208,10 @@ class VisualRepairPlan:
             "anti_regression_constraints": deepcopy(list(self.anti_regression_constraints)),
             "max_attempts": self.max_attempts,
             "face_aesthetic_contract": deepcopy(self.face_aesthetic_contract),
+            "actionable_repair_targets": deepcopy(list(self.actionable_repair_targets or self.repair_targets)),
+            "informational_deviations": deepcopy(list(self.informational_deviations)),
+            "adherence_disposition": deepcopy(self.adherence_disposition),
+            "repair_trigger_decision": deepcopy(self.repair_trigger_decision),
         }
 
     @classmethod
@@ -221,6 +231,10 @@ class VisualRepairPlan:
             anti_regression_constraints=tuple(deepcopy(data.get("anti_regression_constraints", ()))),
             max_attempts=int(data.get("max_attempts", MAX_REPAIR_ATTEMPTS)),
             face_aesthetic_contract=deepcopy(dict(data.get("face_aesthetic_contract") or {})),
+            actionable_repair_targets=tuple(deepcopy(data.get("actionable_repair_targets", data.get("repair_targets", ())))),
+            informational_deviations=tuple(deepcopy(data.get("informational_deviations", ()))),
+            adherence_disposition=deepcopy(dict(data.get("adherence_disposition") or {})) if data.get("adherence_disposition") is not None else None,
+            repair_trigger_decision=deepcopy(dict(data.get("repair_trigger_decision") or {})) if data.get("repair_trigger_decision") is not None else None,
         )
 
 
@@ -263,8 +277,10 @@ def build_repair_plan(
     max_attempts: int = MAX_REPAIR_ATTEMPTS,
     include_minor: bool = True,
     generation_artifact: Mapping[str, Any] | None = None,
+    final_design: Mapping[str, Any] | None = None,
+    manual_repair_fields: Sequence[str] = (),
 ) -> VisualRepairPlan:
-    """Build only from critic repair_targets and current-run contract data."""
+    """Build only from policy-approved actionable targets and current-run data."""
     data = _mapping(review)
     if generation_artifact is not None:
         artifact = _mapping(generation_artifact)
@@ -295,8 +311,28 @@ def build_repair_plan(
     anti_fields = _field_set(contract.get("anti_substitution"))
     field_results = data.get("field_results") if isinstance(data.get("field_results"), Mapping) else {}
 
+    stored_disposition = data.get("adherence_disposition")
+    stored_trigger = data.get("repair_trigger_decision")
+    if manual_repair_fields or not isinstance(stored_disposition, Mapping):
+        disposition = evaluate_adherence_disposition(
+            data,
+            manifest=manifest_data,
+            visual_specification_contract=contract,
+            final_design=final_design,
+            manual_repair_fields=manual_repair_fields,
+        ).to_dict()
+        stored_disposition = disposition
+        stored_trigger = disposition["repair_trigger_decision"]
+    else:
+        disposition = deepcopy(dict(stored_disposition))
+    trigger = stored_trigger if isinstance(stored_trigger, Mapping) else disposition.get("repair_trigger_decision", {})
+    actionable_source = trigger.get("actionable_repair_targets") if isinstance(trigger, Mapping) else None
+    informational = trigger.get("informational_deviations", ()) if isinstance(trigger, Mapping) else ()
+    if actionable_source is None:
+        actionable_source = disposition.get("actionable_repair_targets", ())
+
     targets: list[dict[str, Any]] = []
-    for raw_target in data.get("repair_targets", ()):
+    for raw_target in actionable_source or ():
         if not isinstance(raw_target, Mapping) or not raw_target.get("field"):
             continue
         target = deepcopy(dict(raw_target))
@@ -305,15 +341,17 @@ def build_repair_plan(
             target.setdefault("result", field_results[field].get("result"))
             target.setdefault("required", field_results[field].get("required"))
             target.setdefault("observed", field_results[field].get("observed"))
-        severity = _severity(
+        importance = str(target.get("repair_importance") or "").upper()
+        severity = importance if importance in REPAIR_SEVERITIES else _severity(
             target,
             explicit_fields=explicit_fields,
             required_strict_fields=strict_fields,
             anti_substitution_fields=anti_fields,
         )
-        if severity == "MINOR" and not include_minor:
+        if severity in {"MINOR", "INFORMATIONAL", "IGNORE"} and not include_minor:
             continue
         target["repair_severity"] = severity
+        target.setdefault("repair_importance", "INFORMATIONAL" if severity == "IGNORE" else severity)
         targets.append(target)
 
     if repair_attempt > max_attempts:
@@ -373,15 +411,19 @@ def build_repair_plan(
         anti_regression_constraints=tuple(constraints),
         max_attempts=max_attempts,
         face_aesthetic_contract=deepcopy(dict(face_contract)) if isinstance(face_contract, Mapping) else {},
+        actionable_repair_targets=tuple(deepcopy(targets)),
+        informational_deviations=tuple(deepcopy(informational or ())),
+        adherence_disposition=deepcopy(dict(disposition)),
+        repair_trigger_decision=deepcopy(dict(trigger)) if isinstance(trigger, Mapping) else None,
     )
 
 
 def should_repair(plan: VisualRepairPlan | Mapping[str, Any], *, include_minor: bool = False) -> bool:
     data = _mapping(plan)
-    targets = data.get("repair_targets", ())
+    targets = data.get("actionable_repair_targets", data.get("repair_targets", ()))
     if include_minor:
         return bool(targets)
-    return any(str(item.get("repair_severity")) not in {"MINOR", "IGNORE"} for item in targets if isinstance(item, Mapping))
+    return any(str(item.get("repair_severity")) not in {"MINOR", "INFORMATIONAL", "IGNORE"} for item in targets if isinstance(item, Mapping))
 
 
 def _prompt_data(bundle: Any) -> Mapping[str, Any]:

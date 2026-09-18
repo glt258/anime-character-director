@@ -57,10 +57,11 @@ def _review(
 
 def _plan(review: VisualAdherenceReview, *, explicit: tuple[str, ...] = (), include_minor: bool = True):
     hard = {name: item["required"] for name, item in review.field_results.items()}
+    metadata = {name: {"ownership": "HUMAN_SELECTION"} for name in review.field_results}
     return build_repair_plan(
         review,
-        manifest={"hard_constraints": hard},
-        visual_specification_contract={"hard_constraints": hard, "explicit_hard_fields": list(explicit), "anti_substitution": {}},
+        manifest={"hard_constraints": hard, "field_metadata": metadata},
+        visual_specification_contract={"hard_constraints": hard, "explicit_hard_fields": list(explicit), "anti_substitution": {}, "field_metadata": metadata},
         repair_attempt=1,
         include_minor=include_minor,
     )
@@ -129,11 +130,11 @@ def test_type_3_is_replacement_and_type_4_is_strengthen_only() -> None:
     assert "Strengthen only" in fine_grained.repair_instructions[0]["text"]
 
 
-def test_minor_partial_can_be_excluded_by_policy() -> None:
+def test_human_partial_is_actionable_by_policy() -> None:
     review = _review({"head_attitude": ("chin raised", "PARTIAL", "level chin")})
     plan = _plan(review, include_minor=True)
     assert plan.repair_targets
-    assert should_repair(plan) is False
+    assert should_repair(plan) is True
     assert should_repair(plan, include_minor=True) is True
 
 
@@ -221,18 +222,18 @@ def test_anatomy_failure_is_a_repair_target() -> None:
     )
     plan = _plan(anatomy_target)
     assert plan.repair_targets[0]["field"] == "anatomy_check"
-    assert plan.repair_targets[0]["repair_severity"] == "MAJOR"
+    assert plan.repair_targets[0]["repair_severity"] == "CRITICAL"
 
 
 def test_workflow_runner_exposes_repair_status_and_plan(tmp_path: Path) -> None:
     runner = PersistentWorkflowRunner(tmp_path)
-    response = runner.start_workflow("adult succubus character", mode="QUICK", seed=11)
+    response = runner.start_workflow("快速画一个女仆角色，鞋子是露趾高跟，整体风格是商业二游", mode="QUICK", seed=11)
     session = runner.runtime.load_session(response.session_id)
     runner.record_generation_artifact(response.run_id, IMAGE)
     manifest = session.compiled_prompt["prompt_adherence_manifest"]
     fields = {name: value for source in ("hard_constraints", "strong_preferences", "pose_specification", "background_specification") for name, value in manifest.get(source, {}).items()}
     observations = {"field_results": {name: {"observed": value, "result": "PASS"} for name, value in fields.items()}, "hand_anatomy_check": {"result": "PASS"}, "foot_visibility_and_integrity_check": {"result": "PASS"}}
-    first_field = next(iter(fields))
+    first_field = "footwear_category"
     observations["field_results"][first_field] = {"observed": "wrong", "result": "FAIL"}
     runner.record_visual_adherence_review(response.run_id, IMAGE, observations=observations)
     planned = runner.build_visual_repair_plan(response.run_id)
@@ -242,13 +243,13 @@ def test_workflow_runner_exposes_repair_status_and_plan(tmp_path: Path) -> None:
 
 def test_runtime_persists_repair_replay_and_idempotent_resume(tmp_path: Path) -> None:
     runtime = InteractionRuntime(tmp_path)
-    response = runtime.create_session("adult succubus character", "QUICK", seed=7)
+    response = runtime.create_session("快速画一个女仆角色，鞋子是露趾高跟，整体风格是商业二游", "QUICK", seed=7)
     session = runtime.load_session(response.session_id)
     original_artifact = runtime.record_generation_artifact(response.session_id, IMAGE)
     manifest = session.compiled_prompt["prompt_adherence_manifest"]
     fields = {name: value for source in ("hard_constraints", "strong_preferences", "pose_specification", "background_specification") for name, value in manifest.get(source, {}).items()}
     observations = {"field_results": {name: {"observed": value, "result": "PASS"} for name, value in fields.items()}, "hand_anatomy_check": {"result": "PASS"}, "foot_visibility_and_integrity_check": {"result": "PASS"}}
-    first_field = next(iter(fields))
+    first_field = "footwear_category"
     observations["field_results"][first_field] = {"observed": "wrong", "result": "FAIL", "failure_types": ["TYPE 3"]}
     runtime.record_visual_adherence_review(response.session_id, IMAGE, observations=observations)
 
@@ -273,16 +274,19 @@ def test_runtime_persists_repair_replay_and_idempotent_resume(tmp_path: Path) ->
 
 
 def _strong_plan(review: VisualAdherenceReview):
+    metadata = {name: {"ownership": "HUMAN_SELECTION"} for name in review.field_results}
     return build_repair_plan(
         review,
         manifest={
             "hard_constraints": {"architecture_language": "modern geometric"},
             "strong_preferences": {"palette_family": "violet / graphite"},
+            "field_metadata": metadata,
         },
         visual_specification_contract={
             "hard_constraints": {"architecture_language": "modern geometric"},
             "strong_preferences": {"palette_family": "violet / graphite"},
             "anti_substitution": {},
+            "field_metadata": metadata,
         },
     )
 
@@ -361,13 +365,13 @@ def test_review_is_bound_to_generation_identity(tmp_path: Path) -> None:
 
 def _runtime_with_failed_review(tmp_path: Path):
     runtime = InteractionRuntime(tmp_path)
-    response = runtime.create_session("adult succubus character", "QUICK", seed=21)
+    response = runtime.create_session("快速画一个女仆角色，鞋子是露趾高跟，整体风格是商业二游", "QUICK", seed=21)
     artifact = runtime.record_generation_artifact(response.session_id, IMAGE, run_id="run-21")
     session = runtime.load_session(response.session_id)
     manifest = session.compiled_prompt["prompt_adherence_manifest"]
     fields = {name: value for source in ("hard_constraints", "strong_preferences", "pose_specification", "background_specification") for name, value in manifest.get(source, {}).items()}
     observations = {"field_results": {name: {"observed": value, "result": "PASS"} for name, value in fields.items()}, "hand_anatomy_check": {"result": "PASS"}, "foot_visibility_and_integrity_check": {"result": "PASS"}}
-    first = next(iter(fields))
+    first = "footwear_category"
     observations["field_results"][first] = {"observed": "wrong", "result": "FAIL"}
     runtime.record_visual_adherence_review(response.session_id, IMAGE, observations=observations)
     return runtime, response, artifact

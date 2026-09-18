@@ -48,6 +48,7 @@ try:
     )
     from .visual_context_firewall import DEFAULT_BLOCKED_CONTEXT_SOURCES, VisualContextFirewall
     from .cross_run_novelty import DesignSignature, NoveltyGuard, NoveltyPolicy
+    from .adherence_policy import evaluate_adherence_disposition
     from .visual_adherence_critic import VisualAdherenceCritic, VisualAdherenceReview
     from .visual_repair import (
         MAX_REPAIR_ATTEMPTS,
@@ -90,6 +91,7 @@ except ImportError:  # pragma: no cover - supports direct host imports
     )
     from visual_context_firewall import DEFAULT_BLOCKED_CONTEXT_SOURCES, VisualContextFirewall  # type: ignore
     from cross_run_novelty import DesignSignature, NoveltyGuard, NoveltyPolicy  # type: ignore
+    from adherence_policy import evaluate_adherence_disposition  # type: ignore
     from visual_adherence_critic import VisualAdherenceCritic, VisualAdherenceReview  # type: ignore
     from visual_repair import (  # type: ignore
         MAX_REPAIR_ATTEMPTS,
@@ -1844,12 +1846,25 @@ class InteractionRuntime:
             prompt_hash=prompt_hash,
             generation_id=str(artifact.get("generation_id")),
         )
+        disposition = evaluate_adherence_disposition(
+            review,
+            manifest=manifest,
+            visual_specification_contract=prompt_bundle.get("visual_specification_contract") or final_design.get("visual_specification_contract"),
+            final_design=final_design,
+        ).to_dict()
+        review = VisualAdherenceReview.from_dict(
+            {
+                **review.to_dict(),
+                "adherence_disposition": disposition,
+                "repair_trigger_decision": disposition["repair_trigger_decision"],
+            }
+        )
         session.visual_adherence_review = review.to_dict()
         if session.original_visual_adherence_review is None:
             session.original_image = str(actual_image)
             session.original_visual_adherence_review = review.to_dict()
             session.best_artifact = initial_best_artifact(review, actual_image, generation_artifact=artifact)
-        session.repair_status = "ACCEPTED" if review.overall_result == "PASS" else "ADHERENCE_REVIEWED"
+        session.repair_status = "ACCEPTED" if disposition["disposition"] == "ACCEPT" else "ADHERENCE_REVIEWED"
         session.artifact_status["visual_adherence_review"] = "fresh"
         session.audit_log.append(
             {
@@ -1857,6 +1872,8 @@ class InteractionRuntime:
                 "actual_image": str(actual_image),
                 "overall_result": review.overall_result,
                 "failure_types": list(review.failure_types),
+                "disposition": disposition["disposition"],
+                "repair_required": disposition["repair_required"],
             }
         )
         self._save(session)
@@ -1868,6 +1885,7 @@ class InteractionRuntime:
         *,
         max_attempts: int = MAX_REPAIR_ATTEMPTS,
         include_minor: bool = True,
+        manual_repair_fields: Sequence[str] = (),
     ) -> dict[str, Any]:
         """Prepare one idempotent repair attempt; ImageGen remains external."""
         session = self.load_session(session_id)
@@ -1899,10 +1917,13 @@ class InteractionRuntime:
             repair_attempt=attempt_number,
             max_attempts=max_attempts,
             include_minor=include_minor,
+            manual_repair_fields=manual_repair_fields,
+            final_design=session.final_design if isinstance(session.final_design, Mapping) else None,
             generation_artifact=generation_artifact,
         )
         if not plan.repair_targets:
-            session.repair_status = "ACCEPTED" if not review_data.get("repair_targets") else "ADHERENCE_REVIEWED"
+            disposition = (review_data.get("adherence_disposition") or {}).get("disposition")
+            session.repair_status = disposition if disposition in {"ACCEPT", "ACCEPT_WITH_DEVIATIONS", "BLOCKED"} else "ADHERENCE_REVIEWED"
             self._save(session)
             return {"status": session.repair_status, "repair_plan": plan.to_dict(), "repair_prompt": None}
         repair_prompt = compile_repair_prompt(prompt_bundle, plan)
@@ -2009,6 +2030,19 @@ class InteractionRuntime:
             prompt_bundle_metadata={**prompt_bundle, "prompt": attempt["repair_prompt"]["prompt"]},
             prompt_hash=generation.get("prompt_hash"),
             generation_id=str(generation.get("generation_id")),
+        )
+        disposition = evaluate_adherence_disposition(
+            after,
+            manifest=manifest,
+            visual_specification_contract=prompt_bundle.get("visual_specification_contract") or (session.final_design or {}).get("visual_specification_contract"),
+            final_design=session.final_design or {},
+        ).to_dict()
+        after = VisualAdherenceReview.from_dict(
+            {
+                **after.to_dict(),
+                "adherence_disposition": disposition,
+                "repair_trigger_decision": disposition["repair_trigger_decision"],
+            }
         )
         comparison = evaluate_repair_attempt(before, after, plan)
         candidate = {
@@ -2620,8 +2654,14 @@ def build_visual_repair_plan(
     *,
     max_attempts: int = MAX_REPAIR_ATTEMPTS,
     include_minor: bool = True,
+    manual_repair_fields: Sequence[str] = (),
 ) -> dict[str, Any]:
-    return InteractionRuntime(session_root).build_visual_repair_plan(session_id, max_attempts=max_attempts, include_minor=include_minor)
+    return InteractionRuntime(session_root).build_visual_repair_plan(
+        session_id,
+        max_attempts=max_attempts,
+        include_minor=include_minor,
+        manual_repair_fields=manual_repair_fields,
+    )
 
 
 def record_visual_repair_generation(
