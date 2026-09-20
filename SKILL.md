@@ -411,6 +411,10 @@ Text-only pose guidance for the current test character: a full-body adult woman 
 - [standee-variants.md](references/standee-variants.md) — four-direction same-character standee pose planning, Human selection/Mix, and Canon-preserving generation boundary.
 - [standee-first-scope.md](references/standee-first-scope.md) — core standee assets, optional extensions, presentation types, mode scope, and P8 boundary.
 - [game_styles/registry.yaml](references/game_styles/registry.yaml) — packaged reviewed game-rendering registry and aliases.
+- [local_style_references/README.md](references/local_style_references/README.md) — optional local-only character-art reference library and resolver CLI.
+- [local_style_references/STYLE_REFERENCE_CONTRACT.md](references/local_style_references/STYLE_REFERENCE_CONTRACT.md) — explicit-user-constraint priority and anti-cloning contract.
+- [REFERENCE_CONDITIONING_INTEGRATION_V1.md](REFERENCE_CONDITIONING_INTEGRATION_V1.md) — YAML plus local-reference generation handoff, fallback, and observability.
+- [QA_AB_TEST_PLAN_REFERENCE_CONDITIONING_V1.md](QA_AB_TEST_PLAN_REFERENCE_CONDITIONING_V1.md) — A/B and Human Acceptance v3 preparation.
 - [GAME_STYLE_PROMPT_DIFF_REPORT.md](GAME_STYLE_PROMPT_DIFF_REPORT.md) — fixed-character five-mode prompt diff.
 - [GAME_STYLE_PROMPT_DIFF_REPORT_V2.md](GAME_STYLE_PROMPT_DIFF_REPORT_V2.md) — structured v2 fixed-character five-mode prompt diff.
 - [qa/game_style_v2/GAME_STYLE_WEAKNESS_DIAGNOSIS.md](qa/game_style_v2/GAME_STYLE_WEAKNESS_DIAGNOSIS.md) — v1 weakness diagnosis and v2 acceptance boundary.

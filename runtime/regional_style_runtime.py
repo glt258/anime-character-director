@@ -40,6 +40,7 @@ try:
         pose_specification_for_family,
     )
     from .visual_context_firewall import VisualContextFirewall
+    from .style_references import StyleConditioningContext
 except ImportError:  # pragma: no cover - supports direct host imports
     from game_style_runtime import StyleInstructionFragment  # type: ignore
     from leg_separation_runtime import (  # type: ignore
@@ -69,6 +70,7 @@ except ImportError:  # pragma: no cover - supports direct host imports
         pose_specification_for_family,
     )
     from visual_context_firewall import VisualContextFirewall  # type: ignore
+    from style_references import StyleConditioningContext  # type: ignore
 
 
 class RegionalVisualLanguage(str, Enum):
@@ -1316,6 +1318,8 @@ class PromptBundle:
     game_style_rendering_signatures: tuple[dict[str, Any], ...] = ()
     game_style_requested: str | None = None
     game_style_fallback_reason: str | None = None
+    reference_conditioning: dict[str, Any] = field(default_factory=dict)
+    creation_mode: str = "AI_DECIDE"
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -1372,6 +1376,8 @@ class PromptCompiler:
         game_style_fragment: StyleInstructionFragment | Mapping[str, Any] | None = None,
         game_style_requested: str | None = None,
         game_style_fallback_reason: str | None = None,
+        reference_conditioning: StyleConditioningContext | Mapping[str, Any] | None = None,
+        creation_mode: str = "AI_DECIDE",
     ) -> PromptBundle:
         firewall = VisualContextFirewall.from_metadata(visual_context_firewall)
         if not firewall.visual_context_firewall_applied:
@@ -1431,6 +1437,14 @@ class PromptCompiler:
             lower_body_constraints = _lower_body_prompt_lines(lower_body_variables)
         visual_contract = _normalize_visual_specification_contract(visual_specification_contract)
         game_fragment = game_style_fragment.to_dict() if isinstance(game_style_fragment, StyleInstructionFragment) else dict(game_style_fragment or {})
+        reference_context = (
+            reference_conditioning.to_dict()
+            if isinstance(reference_conditioning, StyleConditioningContext)
+            else dict(reference_conditioning or {})
+        )
+        reference_bundle = reference_context.get("reference_bundle")
+        if not isinstance(reference_bundle, Mapping):
+            reference_bundle = {}
         game_instructions = tuple(str(item) for item in game_fragment.get("instructions", ()))
         game_claim_ids = tuple(str(item) for item in game_fragment.get("source_claim_ids", ()))
         game_rules = tuple(dict(item) for item in game_fragment.get("rules", ()) if isinstance(item, Mapping))
@@ -1500,6 +1514,25 @@ class PromptCompiler:
                 )
             if not game_rules:
                 prompt_lines.extend(f"- {item}" for item in game_instructions)
+        if (
+            reference_bundle.get("enabled")
+            and reference_bundle.get("available")
+            and reference_bundle.get("reference_conditioning_mode") == "yaml_plus_local_references"
+        ):
+            # WHY: attached images are style evidence, not identity templates;
+            # this keeps the result-first freedom while protecting hard locks.
+            prompt_lines.extend(
+                (
+                    "",
+                    "## LOCAL CHARACTER-ART STYLE REFERENCES",
+                    "Use the attached images as game character illustration style references.",
+                    "They may influence rendering and unlocked design space: silhouette language, costume structure, ornament density, accessory organization, material treatment, color organization, visual packaging, and presentation energy.",
+                    "Explicit user constraints have higher priority than any reference-derived style preference.",
+                    "Do not copy a reference character identity, exact face, exact hairstyle, exact outfit, exact emblem, exact accessory combination, or exact character silhouette.",
+                    f"Reference conditioning mode: {reference_bundle.get('reference_conditioning_mode')}",
+                    f"Style drift policy: {reference_bundle.get('style_drift_policy', 'balanced')}",
+                )
+            )
         if visual_contract is not None:
             if visual_contract.hard_constraints:
                 prompt_lines.extend(("", "## HARD DESIGN SPECIFICATION"))
@@ -1686,10 +1719,13 @@ class PromptCompiler:
                 "profile_version": game_fragment.get("profile_version"),
                 "projection_version": game_fragment.get("projection_version"),
                 "source_claim_ids": list(game_claim_ids),
+                "reference_conditioning": reference_context,
             },
             game_style_rendering_signatures=tuple(dict(item) for item in game_fragment.get("rendering_signature", ()) if isinstance(item, Mapping)),
             game_style_requested=game_style_requested,
             game_style_fallback_reason=game_style_fallback_reason,
+            reference_conditioning=reference_context,
+            creation_mode=creation_mode,
         )
 
 

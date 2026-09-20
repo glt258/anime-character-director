@@ -71,6 +71,8 @@ try:
         initial_best_artifact,
         select_best_artifact,
     )
+    from .style_references import build_style_conditioning_context
+    from .image_request import build_image_request
 except ImportError:  # pragma: no cover - supports direct host imports
     from regional_style_runtime import (  # type: ignore
         DEFAULT_FACE_AESTHETIC_PROFILE,
@@ -125,6 +127,8 @@ except ImportError:  # pragma: no cover - supports direct host imports
         initial_best_artifact,
         select_best_artifact,
     )
+    from style_references import build_style_conditioning_context  # type: ignore
+    from image_request import build_image_request  # type: ignore
 
 
 INTERACTION_SESSION_VERSION = "1.1.0"
@@ -2373,6 +2377,13 @@ class InteractionRuntime:
                         error_code=error.code,
                     )
                 session.compiled_prompt = compiled.to_dict()
+                # Keep the backend-neutral request beside the prompt so the
+                # later ImageGen seam can attach validated paths without
+                # reopening the manifest or duplicating resolver logic.
+                session.compiled_prompt["image_request"] = build_image_request(
+                    session.compiled_prompt,
+                    mode=session.creation_mode,
+                ).to_dict()
                 validate_game_style_preference_preservation(
                     session.compiled_prompt,
                     CharacterDesignContext(explicit_preferences=(session.final_design or {}).get("visual_preferences") or {}),
@@ -2712,6 +2723,7 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         "face_aesthetic_contract": face_selection.to_dict(),
         "lower_body": lower_body,
         "visual_preferences": visual,
+        "creation_mode": session.creation_mode,
         "design_dna": design_dna,
         "provenance": {name: (session.visual_preference_sheet or {}).get("variables", {}).get(name, {}).get("selection_source", "policy_default") for name in visual},
         **firewall.to_dict(),
@@ -2818,6 +2830,17 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
             global_rendering_contract="CONTEMPORARY_COMMERCIAL_GACHA_ANIME",
         ),
     )
+    reference_context = build_style_conditioning_context(
+        game_style_id=game_style_id,
+        requested_game_style_id=final_design.get("game_style_request") or game_style_id,
+        mode=final_design.get("creation_mode"),
+        style_profile=profile.to_dict() if profile is not None else None,
+        explicit_constraints=explicit_records,
+        roles=final_design.get("reference_roles"),
+        context={"request": identity},
+        asset_root=final_design.get("reference_asset_root"),
+        config=final_design.get("reference_conditioning_config"),
+    )
     return {
         "character_visual_style": str(final_design.get("character_visual_style", "clean-line contemporary gacha anime")),
         "character_identity": identity,
@@ -2839,6 +2862,8 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
         "game_style_fragment": game_fragment,
         "game_style_requested": final_design.get("game_style_request"),
         "game_style_fallback_reason": final_design.get("game_style_fallback_reason"),
+        "reference_conditioning": reference_context,
+        "creation_mode": final_design.get("creation_mode", "AI_DECIDE"),
         "visual_context_firewall": {name: deepcopy(final_design.get(name)) for name in ("inherit_previous_visuals", "allowed_visual_inheritance", "blocked_context_sources", "visual_context_firewall_applied", "style_inheritance_policy")},
     }
 

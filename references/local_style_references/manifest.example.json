@@ -1,0 +1,32 @@
+{
+  "schema_version": "local_style_reference_manifest_v1",
+  "library_version": "v1",
+  "games": {
+    "example_game": {
+      "references": [
+        {
+          "id": "example_ref_001",
+          "game_style_id": "example_game",
+          "canonical_character_id": "example_game:character_01",
+          "character_name": "Example Character",
+          "gender_presentation": "female",
+          "nonhuman_level": "human",
+          "relative_path": "example_game/example_reference_01.png",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "width": 1,
+          "height": 1,
+          "source_type": "official",
+          "source_site": "example.invalid",
+          "source_page": "https://example.invalid/character",
+          "source_file_url": "https://example.invalid/example_reference_01.png",
+          "official_verified": false,
+          "roles": ["overall_character_art"],
+          "quality_rank": 1,
+          "source_dataset": "example_only",
+          "provenance_ref": "example_only",
+          "selection_reason": ["schema_example_only"]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Copy to %USERPROFILE%\.codex\anime-character-director.local.yaml and edit.
+# Do not commit the real local config or any local reference images.
+local_assets:
+  root: D:\anime-character-director-assets
+
+# Optional v1 conditioning controls. Real artwork and this local config stay outside Git.
+local_references:
+  enable_local_style_references: true
+  max_local_style_references: 3
+  reference_conditioning_mode: auto
+  style_drift_policy_default_quick: style_forward
+  style_drift_policy_default_ai_decide: balanced

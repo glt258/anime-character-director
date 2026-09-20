@@ -283,6 +283,10 @@ git clone https://github.com/glt258/anime-character-director.git "%USERPROFILE%\
 ## Documentation
 
 - [Skill contract](SKILL.md)
+- [Local character-art reference interface](references/local_style_references/README.md)
+- [Style reference contract](references/local_style_references/STYLE_REFERENCE_CONTRACT.md)
+- [Reference conditioning integration v1](REFERENCE_CONDITIONING_INTEGRATION_V1.md)
+- [Reference conditioning A/B QA plan](QA_AB_TEST_PLAN_REFERENCE_CONDITIONING_V1.md)
 - [Three-mode interaction guide](references/creative-modes.md)
 - [Persistent interactive workflow](docs/PERSISTENT_INTERACTIVE_WORKFLOW.md)
 - [Interaction architecture](docs/INTERACTION_SYSTEM.md)

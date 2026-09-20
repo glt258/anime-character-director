@@ -11,3 +11,7 @@ tmp/
 .env
 *.tmp
 *.log
+
+# Optional local style-reference configuration; real artwork lives outside Git.
+anime-character-director.local.yaml
+config/anime-character-director.local.yaml

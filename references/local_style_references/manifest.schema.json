@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "local-style-reference-manifest-v1",
+  "title": "Local Style Reference Manifest v1",
+  "type": "object",
+  "required": ["schema_version", "library_version", "games"],
+  "properties": {
+    "schema_version": {"const": "local_style_reference_manifest_v1"},
+    "library_version": {"type": "string", "minLength": 1},
+    "games": {
+      "type": "object",
+      "description": "Extensible game-style map; future IDs are valid.",
+      "additionalProperties": {"$ref": "#/$defs/game"}
+    }
+  },
+  "$defs": {
+    "game": {
+      "type": "object",
+      "required": ["references"],
+      "properties": {
+        "references": {"type": "array", "items": {"$ref": "#/$defs/reference"}}
+      },
+      "additionalProperties": false
+    },
+    "reference": {
+      "type": "object",
+      "required": [
+        "id", "game_style_id", "canonical_character_id", "character_name",
+        "gender_presentation", "nonhuman_level", "relative_path", "sha256",
+        "width", "height", "source_type", "official_verified", "roles",
+        "quality_rank", "selection_reason", "source_page", "source_file_url"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "game_style_id": {"type": "string", "minLength": 1},
+        "canonical_character_id": {"type": "string", "minLength": 1},
+        "character_name": {"type": "string", "minLength": 1},
+        "gender_presentation": {"enum": ["female", "male", "unknown"]},
+        "nonhuman_level": {"enum": ["human", "light_nonhuman", "strong_nonhuman"]},
+        "relative_path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "source_type": {"enum": ["official", "wiki"]},
+        "source_site": {"type": "string"},
+        "source_page": {"type": "string", "minLength": 1},
+        "source_file_url": {"type": "string", "minLength": 1},
+        "official_verified": {"type": "boolean"},
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "quality_rank": {"type": "integer", "minimum": 1, "maximum": 5},
+        "source_dataset": {"type": "string"},
+        "provenance_ref": {"type": "string"},
+        "selection_reason": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    }
+  }
+}
