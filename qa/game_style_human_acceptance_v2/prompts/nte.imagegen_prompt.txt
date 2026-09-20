@@ -1,0 +1,11 @@
+FIXED CHARACTER / BACKGROUND / LIGHTING:
+Use the exact fixture in global.imagegen_prompt.txt. Keep the same full-body pose, camera, neutral architectural-panel background, and lighting intent.
+
+RENDERING SPECIALIZATION:
+LINE_CONTOUR [medium]: Keep contour treatment subject-dependent, allowing multiple recurring edge strategies instead of one dominant mode.
+INTERNAL_EDGE [medium]: Treat interior subject edges as a controlled variable, not a mandatory hard-or-soft global rule.
+PRIMARY_SHADOW [medium]: Allow more than one recurring primary-shadow strategy across subject planes.
+SECONDARY_GRADIENT [medium]: Allow more than one recurring gradient-versus-shadow transition while preserving local coherence.
+DETAIL_FREQUENCY [medium]: Use high surface frequency, but gate it through deliberate localized grouping instead of uniform noise.
+
+Do not change character content, body, clothing, footwear, hair, eyes, pose, camera, background, or lighting.

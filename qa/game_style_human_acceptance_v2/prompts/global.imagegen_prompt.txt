@@ -1,0 +1,14 @@
+CHARACTER IDENTITY:
+adult woman; pink shoulder-length hair; teal eyes; petite build; white and navy short jacket; black shorts; flat ankle boots; no stockings; human; stable open stance
+
+GLOBAL RENDERING MEDIUM:
+CONTEMPORARY_COMMERCIAL_GACHA_ANIME
+
+BACKGROUND:
+simple neutral commercial character showcase background, light neutral architectural panels, subtle depth, no game-specific landmarks, no fantasy city, no futuristic skyline, no faction symbols, no environmental storytelling, background secondary
+
+LIGHTING:
+neutral soft directional studio-like daylight, stable key direction, moderate overall contrast
+
+NEGATIVE CONSTRAINTS:
+Keep the same character, pose, camera, background, lighting intent, body, clothing, footwear, hair, eyes, and human anatomy. Do not add game-specific landmarks, symbols, environmental storytelling, or character accessories.

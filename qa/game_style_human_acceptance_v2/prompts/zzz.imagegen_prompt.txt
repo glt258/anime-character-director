@@ -1,0 +1,11 @@
+FIXED CHARACTER / BACKGROUND / LIGHTING:
+Use the exact fixture in global.imagegen_prompt.txt. Keep the same full-body pose, camera, neutral architectural-panel background, and lighting intent.
+
+RENDERING SPECIALIZATION:
+LINE_CONTOUR [strong]: Soften most subject contour transitions and reserve firm edges for essential separation.
+INTERNAL_EDGE [strong]: Let interior subject separators dissolve into adjacent tone instead of repeating hard graphic edges.
+PRIMARY_SHADOW [strong]: Let continuous tonal modeling carry more subject form than isolated hard shadow blocks.
+SECONDARY_GRADIENT [strong]: Use continuous gradients across connected subject planes as the default transition.
+DETAIL_FREQUENCY [medium]: Use moderate subject-surface frequency with localized accent clusters and larger quiet intervals.
+
+Do not change character content, body, clothing, footwear, hair, eyes, pose, camera, background, or lighting.
