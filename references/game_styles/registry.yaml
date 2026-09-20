@@ -1,5 +1,5 @@
-schema_version: game_style_registry_v1
-profile_version: game_style_profile_v1
+schema_version: game_style_registry_v2
+profile_version: game_style_profile_v2
 profiles:
   - id: genshin_impact
     display_name: Genshin Impact

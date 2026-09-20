@@ -1,29 +1,95 @@
-schema_version: game_style_profile_v1
-profile_version: game_style_profile_v1
+schema_version: game_style_profile_v2
+profile_version: game_style_profile_v2
 source_analysis_version: four_game_style_analysis_run_v1
 sample_manifest_version: style_analysis_sample_v1
-integration_review_version: game_style_integration_gate_v1
+integration_review_version: game_style_integration_gate_v2
 game:
   id: neverness_to_everness
   display_name: Neverness to Everness
 projection:
-  core_rendering_instructions: []
-  supporting_art_direction_instructions:
-    - claim_id: rendering_edge_treatment_soft
-      rule_strength: soft
-      text: Allow multiple recurring rendering strategies for edge treatment instead of enforcing one dominant mode.
-    - claim_id: rendering_shading_soft_dominant
-      rule_strength: soft
-      text: Allow multiple recurring rendering strategies for shading instead of enforcing one dominant mode.
-    - claim_id: art_direction_detail_density_high
-      rule_strength: soft
-      text: Allow multiple recurring rendering strategies for detail density instead of enforcing one dominant mode.
+  rendering_signature:
+    - slot: LINE_CONTOUR
+      absolute_instruction: Keep contour treatment subject-dependent, allowing multiple recurring edge strategies instead of one dominant mode.
+      contrastive_instruction: Relative to Global, preserve local contour variation rather than imposing one universal edge treatment.
+      confidence: medium
+      strength: medium
+      source_claim_ids: [rendering_edge_treatment_soft]
+      tier: core
+    - slot: INTERNAL_EDGE
+      absolute_instruction: Treat interior subject edges as a controlled variable, not a mandatory hard-or-soft global rule.
+      contrastive_instruction: Relative to Global, let interior boundaries vary locally while avoiding a single repeated separator grammar.
+      confidence: medium
+      strength: medium
+      source_claim_ids: [rendering_edge_treatment_soft]
+      tier: core
+    - slot: PRIMARY_SHADOW
+      absolute_instruction: Allow more than one recurring primary-shadow strategy across subject planes.
+      contrastive_instruction: Relative to Global, keep primary subject modeling flexible across local regions rather than uniformly blocked.
+      confidence: medium
+      strength: medium
+      source_claim_ids: [rendering_shading_soft_dominant]
+      tier: core
+    - slot: SECONDARY_GRADIENT
+      absolute_instruction: Allow more than one recurring gradient-versus-shadow transition while preserving local coherence.
+      contrastive_instruction: Relative to Global, retain controlled variation in secondary subject transitions instead of one dominant gradient recipe.
+      confidence: medium
+      strength: medium
+      source_claim_ids: [rendering_shading_soft_dominant]
+      tier: core
+    - slot: DETAIL_FREQUENCY
+      absolute_instruction: Use high surface frequency, but gate it through deliberate localized grouping instead of uniform noise.
+      contrastive_instruction: Relative to Global, keep high subject detail organized as variable local clusters rather than an even fill.
+      confidence: medium
+      strength: medium
+      source_claim_ids: [art_direction_detail_density_high, rendering_texture_detail_high]
+      tier: core
+    - slot: SKIN_RENDERING
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: HAIR_RENDERING
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: EYE_RENDERING
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: MATERIAL_SPECULAR
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: COLOR_VALUE_ORGANIZATION
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: DEPTH_SEPARATION
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: POST_PROCESSING
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: HIGHLIGHT_STRATEGY
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: LOCAL_CONTRAST
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
+    - slot: SHAPE_DETAIL_HIERARCHY
+      status: no_reliable_discriminator
+      confidence: no reliable discriminator
+      strength: subtle
   excluded_global_baseline_claim_ids:
     - rendering_color_structure_low
     - rendering_depth_treatment_high
     - art_direction_shape_hierarchy_high
     - art_direction_surface_organization_hierarchical
   prompt_budget:
-    core_max: 6
-    supporting_max: 3
-    projected_total: 3
+    core_max: 8
+    supporting_max: 2
+    total_max: 10
+    projected_total: 5

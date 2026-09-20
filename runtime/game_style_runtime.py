@@ -17,11 +17,33 @@ from typing import Any, Mapping
 import unicodedata
 
 
-PROFILE_VERSION = "game_style_profile_v1"
-PROJECTION_VERSION = "game_style_projection_v1"
+PROFILE_VERSION = "game_style_profile_v2"
+PROJECTION_VERSION = "game_style_projection_v2"
 GAME_STYLE_FIELD = "game_rendering_style"
+STYLE_DIFFERENCE_VALIDITY_GATE = "STYLE_DIFFERENCE_VALIDITY_GATE"
 _REFERENCE_DIR = Path(__file__).resolve().parents[1] / "references" / "game_styles"
 _DEFAULT_TOKENS = {"", "none", "default", "global", "默认", "不指定", "自定义"}
+RENDERING_SIGNATURE_SLOTS = (
+    "LINE_CONTOUR",
+    "INTERNAL_EDGE",
+    "PRIMARY_SHADOW",
+    "SECONDARY_GRADIENT",
+    "SKIN_RENDERING",
+    "HAIR_RENDERING",
+    "EYE_RENDERING",
+    "MATERIAL_SPECULAR",
+    "COLOR_VALUE_ORGANIZATION",
+    "DETAIL_FREQUENCY",
+    "DEPTH_SEPARATION",
+    "POST_PROCESSING",
+    "HIGHLIGHT_STRATEGY",
+    "LOCAL_CONTRAST",
+    "SHAPE_DETAIL_HIERARCHY",
+)
+_REQUIRED_SIGNATURE_SLOTS = frozenset(RENDERING_SIGNATURE_SLOTS[:12])
+_VALID_STRENGTHS = frozenset({"strong", "medium", "subtle"})
+_VALID_CONFIDENCE = frozenset({"high", "medium", "low", "no reliable discriminator"})
+_VALID_SIGNATURE_STATUS = frozenset({"supported", "no_reliable_discriminator"})
 _FORBIDDEN_CONTENT_TERMS = (
     "hair", "发色", "发型", "eye", "瞳", "body", "breast", "身材", "outfit", "clothing",
     "服装", "footwear", "鞋", "stocking", "丝袜", "pose", "姿势", "background", "背景",
@@ -35,6 +57,93 @@ class GameStyleError(ValueError):
 
 
 @dataclass(frozen=True)
+class GameStyleContrastProfile:
+    """One evidence-backed rendering slot and its relative HOW instruction.
+
+    ``contrastive_instruction`` is deliberately stored beside the absolute
+    instruction.  The compiler can therefore explain the delta relative to
+    Global without putting a game name or character-design choice in the
+    image prompt.
+    """
+
+    game_style_id: str
+    slot: str
+    absolute_instruction: str
+    contrastive_instruction: str
+    confidence: str
+    strength: str
+    source_claim_ids: tuple[str, ...] = ()
+    status: str = "supported"
+    tier: str = "core"
+
+    @classmethod
+    def from_mapping(cls, game_style_id: str, data: Mapping[str, Any]) -> "GameStyleContrastProfile":
+        slot = str(data.get("slot") or "").upper()
+        status = str(data.get("status") or "supported")
+        strength = str(data.get("strength") or data.get("rule_strength") or "subtle").lower()
+        confidence = str(data.get("confidence") or "medium").lower()
+        raw_claims = data.get("source_claim_ids")
+        if raw_claims is None and data.get("claim_id"):
+            raw_claims = (data.get("claim_id"),)
+        claims = tuple(str(item) for item in (raw_claims or ()) if str(item))
+        if slot not in RENDERING_SIGNATURE_SLOTS:
+            raise GameStyleError(f"unsupported rendering signature slot: {slot}")
+        if status not in _VALID_SIGNATURE_STATUS:
+            raise GameStyleError(f"unsupported rendering signature status: {status}")
+        if strength not in _VALID_STRENGTHS:
+            raise GameStyleError(f"unsupported game style rule strength: {strength}")
+        if confidence not in _VALID_CONFIDENCE:
+            raise GameStyleError(f"unsupported game style rule confidence: {confidence}")
+        if status == "supported" and (not data.get("absolute_instruction") or not data.get("contrastive_instruction")):
+            raise GameStyleError(f"{game_style_id}:{slot} requires absolute and contrastive instructions")
+        if status == "supported" and not claims:
+            raise GameStyleError(f"{game_style_id}:{slot} requires source claim ids")
+        tier = str(data.get("tier") or "core").lower()
+        if tier not in {"core", "supporting", "none"}:
+            raise GameStyleError(f"unsupported rendering signature tier: {tier}")
+        return cls(
+            game_style_id=game_style_id,
+            slot=slot,
+            absolute_instruction=str(data.get("absolute_instruction") or "no reliable discriminator"),
+            contrastive_instruction=str(data.get("contrastive_instruction") or "no reliable discriminator"),
+            confidence=confidence,
+            strength=strength,
+            source_claim_ids=claims,
+            status=status,
+            tier=tier if status == "supported" else "none",
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "game_style_id": self.game_style_id,
+            "slot": self.slot,
+            "absolute_instruction": self.absolute_instruction,
+            "contrastive_instruction": self.contrastive_instruction,
+            "confidence": self.confidence,
+            "strength": self.strength,
+            "source_claim_ids": list(self.source_claim_ids),
+            "status": self.status,
+            "tier": self.tier,
+        }
+
+    def to_instruction(self) -> dict[str, Any]:
+        """Return the compact projected rule consumed by PromptCompiler."""
+        return {
+            "claim_id": self.source_claim_ids[0] if self.source_claim_ids else "",
+            "source_claim_ids": list(self.source_claim_ids),
+            "slot": self.slot,
+            "absolute_instruction": self.absolute_instruction,
+            "contrastive_instruction": self.contrastive_instruction,
+            "text": self.absolute_instruction,
+            "confidence": self.confidence,
+            "strength": self.strength,
+            "rule_strength": self.strength,
+            "status": self.status,
+            "tier": self.tier,
+        }
+
+
+@dataclass(frozen=True)
 class GameStyleProfile:
     """Immutable reviewed profile exposed to production callers."""
 
@@ -44,24 +153,58 @@ class GameStyleProfile:
     source_analysis_version: str
     sample_manifest_version: str
     integration_review_version: str
+    rendering_signature: tuple[GameStyleContrastProfile, ...] = ()
     core_rendering_instructions: tuple[dict[str, Any], ...] = ()
     supporting_art_direction_instructions: tuple[dict[str, Any], ...] = ()
     excluded_global_baseline_claim_ids: tuple[str, ...] = ()
     prompt_budget: dict[str, int] = field(default_factory=dict)
 
+    @property
+    def contrast_profiles(self) -> tuple[GameStyleContrastProfile, ...]:
+        """Compatibility name for callers that consume contrast profiles directly."""
+        return self.rendering_signature
+
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "GameStyleProfile":
         game = data.get("game") if isinstance(data.get("game"), Mapping) else {}
         projection = data.get("projection") if isinstance(data.get("projection"), Mapping) else data
+        game_style_id = str(game.get("id") or data.get("game_style_id") or "")
+        signature = tuple(
+            GameStyleContrastProfile.from_mapping(game_style_id, item)
+            for item in (projection.get("rendering_signature") or ())
+            if isinstance(item, Mapping)
+        )
+        if not signature:
+            # Compatibility reader for pre-v2 artifacts.  Packaged v2 profiles
+            # always use rendering_signature, but old checkpoints may still
+            # carry the former text-only projection shape.
+            signature = tuple(
+                GameStyleContrastProfile.from_mapping(
+                    game_style_id,
+                    {
+                        "slot": "DETAIL_FREQUENCY",
+                        "absolute_instruction": item.get("text"),
+                        "contrastive_instruction": item.get("text"),
+                        "confidence": "medium",
+                        "strength": "subtle",
+                        "source_claim_ids": (item.get("claim_id"),),
+                    },
+                )
+                for item in projection.get("core_rendering_instructions", ())
+                if isinstance(item, Mapping)
+            )
+        core = tuple(item.to_instruction() for item in signature if item.tier == "core")
+        supporting = tuple(item.to_instruction() for item in signature if item.tier == "supporting")
         profile = cls(
-            game_style_id=str(game.get("id") or data.get("game_style_id") or ""),
+            game_style_id=game_style_id,
             display_name=str(game.get("display_name") or data.get("display_name") or ""),
             profile_version=str(data.get("profile_version") or PROFILE_VERSION),
             source_analysis_version=str(data.get("source_analysis_version") or ""),
             sample_manifest_version=str(data.get("sample_manifest_version") or ""),
             integration_review_version=str(data.get("integration_review_version") or ""),
-            core_rendering_instructions=tuple(_instruction(item) for item in projection.get("core_rendering_instructions", ())),
-            supporting_art_direction_instructions=tuple(_instruction(item) for item in projection.get("supporting_art_direction_instructions", ())),
+            rendering_signature=signature,
+            core_rendering_instructions=core or tuple(_instruction(item) for item in projection.get("core_rendering_instructions", ())),
+            supporting_art_direction_instructions=supporting or tuple(_instruction(item) for item in projection.get("supporting_art_direction_instructions", ())),
             excluded_global_baseline_claim_ids=tuple(str(item) for item in projection.get("excluded_global_baseline_claim_ids", ())),
             prompt_budget={str(key): int(value) for key, value in dict(projection.get("prompt_budget") or {}).items()},
         )
@@ -76,6 +219,7 @@ class GameStyleProfile:
             "source_analysis_version": self.source_analysis_version,
             "sample_manifest_version": self.sample_manifest_version,
             "integration_review_version": self.integration_review_version,
+            "rendering_signature": [item.to_dict() for item in self.rendering_signature],
             "core_rendering_instructions": deepcopy(list(self.core_rendering_instructions)),
             "supporting_art_direction_instructions": deepcopy(list(self.supporting_art_direction_instructions)),
             "excluded_global_baseline_claim_ids": list(self.excluded_global_baseline_claim_ids),
@@ -103,12 +247,23 @@ class StyleInstructionFragment:
     source_claim_ids: tuple[str, ...]
     core_instructions: tuple[str, ...] = ()
     supporting_instructions: tuple[str, ...] = ()
+    contrastive_instructions: tuple[str, ...] = ()
+    rendering_signature: tuple[dict[str, Any], ...] = ()
+    rules: tuple[dict[str, Any], ...] = ()
     global_rendering_contract: str = "CONTEMPORARY_COMMERCIAL_GACHA_ANIME"
     overridden_claim_ids: tuple[str, ...] = ()
+    applied_rules: tuple[dict[str, Any], ...] = ()
+    adapted_rules: tuple[dict[str, Any], ...] = ()
+    dropped_rules: tuple[dict[str, Any], ...] = ()
 
     @property
     def prompt_text(self) -> str:
         return " ".join(self.instructions)
+
+    @property
+    def contrast_profiles(self) -> tuple[dict[str, Any], ...]:
+        """Expose projected structured slots without a second storage path."""
+        return self.rendering_signature
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -119,19 +274,33 @@ class StyleInstructionFragment:
             "source_claim_ids": list(self.source_claim_ids),
             "core_instructions": list(self.core_instructions),
             "supporting_instructions": list(self.supporting_instructions),
+            "contrastive_instructions": list(self.contrastive_instructions),
+            "rendering_signature": [dict(item) for item in self.rendering_signature],
+            "rules": [dict(item) for item in self.rules],
             "global_rendering_contract": self.global_rendering_contract,
             "overridden_claim_ids": list(self.overridden_claim_ids),
+            "applied_rules": [dict(item) for item in self.applied_rules],
+            "adapted_rules": [dict(item) for item in self.adapted_rules],
+            "dropped_rules": [dict(item) for item in self.dropped_rules],
         }
 
 
 def _instruction(item: Any) -> dict[str, Any]:
     if not isinstance(item, Mapping) or not item.get("text") or not item.get("claim_id"):
         raise GameStyleError("each projection instruction requires claim_id and text")
-    strength = str(item.get("rule_strength", "soft"))
-    if strength not in {"hard", "soft"}:
+    strength = str(item.get("strength") or item.get("rule_strength") or "subtle").lower()
+    if strength in {"hard", "soft"}:
+        strength = {"hard": "strong", "soft": "subtle"}[strength]
+    if strength not in _VALID_STRENGTHS:
         raise GameStyleError(f"unsupported game style rule strength: {strength}")
     return {
         "claim_id": str(item["claim_id"]),
+        "source_claim_ids": [str(item["claim_id"])],
+        "slot": str(item.get("slot") or "DETAIL_FREQUENCY").upper(),
+        "absolute_instruction": str(item.get("absolute_instruction") or item["text"]),
+        "contrastive_instruction": str(item.get("contrastive_instruction") or item["text"]),
+        "confidence": str(item.get("confidence") or "medium"),
+        "strength": strength,
         "rule_strength": strength,
         "text": str(item["text"]),
     }
@@ -144,13 +313,26 @@ def _validate_profile(profile: GameStyleProfile) -> None:
         raise GameStyleError(f"unsupported profile version: {profile.profile_version}")
     if not all((profile.source_analysis_version, profile.sample_manifest_version, profile.integration_review_version)):
         raise GameStyleError(f"{profile.game_style_id} is missing provenance metadata")
+    slots = [item.slot for item in profile.rendering_signature]
+    if not _REQUIRED_SIGNATURE_SLOTS.issubset(slots):
+        missing = sorted(_REQUIRED_SIGNATURE_SLOTS.difference(slots))
+        raise GameStyleError(f"{profile.game_style_id} is missing rendering signature slots: {missing}")
+    if len(slots) != len(set(slots)):
+        raise GameStyleError(f"{profile.game_style_id} contains duplicate rendering signature slots")
     core_max = int(profile.prompt_budget.get("core_max", 6))
-    supporting_max = int(profile.prompt_budget.get("supporting_max", 3))
-    if len(profile.core_rendering_instructions) > core_max or len(profile.supporting_art_direction_instructions) > supporting_max:
+    supporting_max = int(profile.prompt_budget.get("supporting_max", 2))
+    total_max = int(profile.prompt_budget.get("total_max", 10))
+    if not 5 <= len(profile.core_rendering_instructions) <= core_max:
+        raise GameStyleError(f"{profile.game_style_id} must project 5-{core_max} core instructions")
+    if len(profile.supporting_art_direction_instructions) > supporting_max or len(profile.core_rendering_instructions) + len(profile.supporting_art_direction_instructions) > total_max:
         raise GameStyleError(f"{profile.game_style_id} exceeds its projection budget")
     for instruction in (*profile.core_rendering_instructions, *profile.supporting_art_direction_instructions):
-        if any(term in instruction["text"].casefold() for term in _FORBIDDEN_CONTENT_TERMS):
+        if instruction.get("slot") not in RENDERING_SIGNATURE_SLOTS:
+            raise GameStyleError(f"{profile.game_style_id} contains an invalid rendering slot")
+        if any(term in instruction["absolute_instruction"].casefold() for term in _FORBIDDEN_CONTENT_TERMS):
             raise GameStyleError(f"{profile.game_style_id} contains a character-content instruction")
+        if set(instruction.get("source_claim_ids", ())).intersection(profile.excluded_global_baseline_claim_ids):
+            raise GameStyleError(f"{profile.game_style_id} duplicates a global baseline claim")
 
 
 def _normalized_alias(value: str) -> str:
@@ -238,7 +420,12 @@ def normalize_game_style_request(value: Any) -> tuple[str | None, str | None]:
 
 
 def project_game_style(profile: GameStyleProfile, context: CharacterDesignContext | Mapping[str, Any]) -> StyleInstructionFragment:
-    """Project only reviewed HOW-style instructions within the verified budget."""
+    """Project evidence-backed rendering HOW rules after user conflicts.
+
+    The projector owns the only profile-to-prompt conversion point.  Keeping
+    conflict handling here prevents one caller from accidentally letting a
+    soft game prior outrank an explicit rendering request.
+    """
     if not isinstance(profile, GameStyleProfile):
         raise TypeError("project_game_style requires a resolved GameStyleProfile")
     if not isinstance(context, CharacterDesignContext):
@@ -250,32 +437,83 @@ def project_game_style(profile: GameStyleProfile, context: CharacterDesignContex
     _validate_profile(profile)
     explicit_rendering = {str(key).casefold(): value for key, value in context.explicit_rendering_preferences.items()}
 
-    def keep(item: Mapping[str, Any]) -> bool:
-        claim = str(item["claim_id"]).casefold()
-        # WHY: a user-specified rendering property is a hard local override;
-        # dropping only the conflicting claim preserves compatible game deltas.
-        return not any(
-            token in claim
-            for key, token in {
-                "edge_treatment": "edge_treatment",
-                "shading_strategy": "shading",
-                "detail_density": "detail_density",
-                "texture_detail": "texture_detail",
-            }.items()
-            if key in explicit_rendering
-        )
+    slot_preferences = {
+        "LINE_CONTOUR": ("edge_treatment", "line_contour"),
+        "INTERNAL_EDGE": ("edge_treatment", "internal_edge"),
+        "PRIMARY_SHADOW": ("shading_strategy", "primary_shadow", "lighting"),
+        "SECONDARY_GRADIENT": ("shading_strategy", "secondary_gradient", "lighting"),
+        "DETAIL_FREQUENCY": ("detail_density", "texture_detail", "detail_frequency"),
+        "MATERIAL_SPECULAR": ("material_specular", "specular"),
+        "LOCAL_CONTRAST": ("local_contrast",),
+        "DEPTH_SEPARATION": ("depth_separation",),
+        "COLOR_VALUE_ORGANIZATION": ("color_value_organization", "color_structure"),
+        "POST_PROCESSING": ("post_processing",),
+    }
 
-    core_items = tuple(item for item in profile.core_rendering_instructions if keep(item))
-    supporting_items = tuple(item for item in profile.supporting_art_direction_instructions if keep(item))
-    overridden = tuple(
-        item["claim_id"]
-        for item in (*profile.core_rendering_instructions, *profile.supporting_art_direction_instructions)
-        if not keep(item)
-    )
-    core = tuple(item["text"] for item in core_items)
-    supporting = tuple(item["text"] for item in supporting_items)
+    def explicit_override(item: Mapping[str, Any]) -> tuple[str, Any] | None:
+        keys = slot_preferences.get(str(item.get("slot", "")).upper(), ())
+        for key in keys:
+            if key in explicit_rendering:
+                return key, explicit_rendering[key]
+        return None
+
+    def override_mode(value: Any) -> str:
+        if isinstance(value, Mapping):
+            return str(value.get("mode") or value.get("resolution") or "drop").casefold()
+        text = str(value).casefold()
+        return "adapt" if any(token in text for token in ("adapt", "compatible", "mixed", "localized")) else "drop"
+
+    projected: list[dict[str, Any]] = []
+    applied: list[dict[str, Any]] = []
+    adapted: list[dict[str, Any]] = []
+    dropped: list[dict[str, Any]] = []
+    all_items = (*profile.core_rendering_instructions, *profile.supporting_art_direction_instructions)
+    for original in all_items:
+        item = dict(original)
+        claims = tuple(str(value) for value in item.get("source_claim_ids", (item.get("claim_id"),)) if value)
+        key_value = explicit_override(item)
+        trace = {
+            "slot": item["slot"],
+            "claim_ids": list(claims),
+            "strength": item.get("strength", "subtle"),
+            "confidence": item.get("confidence", "medium"),
+            "conflict_reason": None,
+        }
+        if key_value is None:
+            trace["status"] = "applied"
+            projected.append(item)
+            applied.append(trace)
+            continue
+        key, value = key_value
+        trace["user_field"] = key
+        trace["user_value"] = value
+        if override_mode(value) == "adapt":
+            adapted_item = dict(item)
+            adapted_item["absolute_instruction"] = (
+                f"Keep the explicit user rendering preference for {key} as the controlling local treatment; "
+                f"{item['absolute_instruction']}"
+            )
+            adapted_item["text"] = adapted_item["absolute_instruction"]
+            adapted_item["status"] = "adapted"
+            projected.append(adapted_item)
+            trace.update(status="adapted", conflict_reason=f"adapted around explicit {key}")
+            adapted.append(trace)
+        else:
+            trace.update(status="dropped", conflict_reason=f"explicit user rendering preference overrides {key}")
+            dropped.append(trace)
+    core_items = tuple(item for item in projected if item.get("tier") == "core")
+    supporting_items = tuple(item for item in projected if item.get("tier") == "supporting")
+    core = tuple(item["absolute_instruction"] for item in core_items)
+    supporting = tuple(item["absolute_instruction"] for item in supporting_items)
     instructions = core + supporting
-    claim_ids = tuple(item["claim_id"] for item in (*core_items, *supporting_items))
+    contrastive = tuple(item["contrastive_instruction"] for item in (*core_items, *supporting_items))
+    claim_ids = tuple(
+        claim
+        for item in (*core_items, *supporting_items)
+        for claim in item.get("source_claim_ids", (item.get("claim_id"),))
+        if claim
+    )
+    overridden = tuple(claim for item in dropped for claim in item.get("claim_ids", ()))
     if any(term in text.casefold() for text in instructions for term in _FORBIDDEN_CONTENT_TERMS):
         raise GameStyleError("game style projection attempted to change character content")
     # Explicit rendering preferences remain authoritative; the profile is a soft delta.
@@ -288,8 +526,14 @@ def project_game_style(profile: GameStyleProfile, context: CharacterDesignContex
         source_claim_ids=claim_ids,
         core_instructions=core,
         supporting_instructions=supporting,
+        contrastive_instructions=contrastive,
+        rendering_signature=tuple(item.to_dict() for item in profile.rendering_signature),
+        rules=tuple(dict(item) for item in (*core_items, *supporting_items)),
         global_rendering_contract=context.global_rendering_contract,
         overridden_claim_ids=overridden,
+        applied_rules=tuple(applied),
+        adapted_rules=tuple(adapted),
+        dropped_rules=tuple(dropped),
     )
 
 
@@ -317,6 +561,12 @@ def validate_game_style_preference_preservation(
         )
     claim_ids = set(str(item) for item in data.get("source_claim_ids", ()))
     overridden = set(str(item) for item in data.get("overridden_claim_ids", ()))
+    adapted_claims = {
+        str(claim)
+        for item in data.get("adapted_rules", ())
+        if isinstance(item, Mapping)
+        for claim in item.get("claim_ids", ())
+    }
     for key in context.explicit_rendering_preferences:
         token = {
             "edge_treatment": "edge_treatment",
@@ -325,6 +575,8 @@ def validate_game_style_preference_preservation(
             "texture_detail": "texture_detail",
         }.get(str(key).casefold())
         if token and any(token in claim.casefold() for claim in claim_ids):
+            if any(claim in adapted_claims for claim in claim_ids):
+                continue
             raise GameStyleError(f"explicit rendering preference was not preserved: {key}")
         if token and any(token in claim.casefold() for claim in overridden):
             continue
@@ -376,3 +628,19 @@ def unsupported_game_style_message(request: str | None) -> str | None:
     if request and resolve_game_style(request) is None and _normalized_alias(request) not in {_normalized_alias(item) for item in _DEFAULT_TOKENS}:
         return "当前没有该游戏的已验证 Style Profile，将继续使用默认现代商业二游渲染风格。"
     return None
+
+
+def evaluate_style_difference_validity(
+    character_preservation: str,
+    rendering_difference: str,
+) -> dict[str, Any]:
+    """Apply the v2 post-generation gate without accepting a weak style read."""
+    character_ok = str(character_preservation).upper() == "PASS"
+    rendering_ok = str(rendering_difference).upper() == "CLEAR_CHARACTER_RENDERING_DIFFERENCE"
+    return {
+        "gate": STYLE_DIFFERENCE_VALIDITY_GATE,
+        "status": "PASS" if character_ok and rendering_ok else "FAIL",
+        "character_preservation": str(character_preservation),
+        "rendering_difference": str(rendering_difference),
+        "reason": "character preservation and clear subject rendering difference are both required",
+    }

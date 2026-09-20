@@ -1,0 +1,160 @@
+## GLOBAL RENDERING MEDIUM
+## Rendering Foundation
+CONTEMPORARY_COMMERCIAL_GACHA_ANIME
+
+## REGIONAL VISUAL LANGUAGE
+## Regional Visual Language
+EAST_ASIAN_CONTEMPORARY_GACHA
+anime-first facial abstraction with simplified facial planes, restrained nose and lips, and clean graphic jaw/chin construction
+modern East-Asian commercial gacha illustration grammar with a readable playable-character focal point
+anime-proportioned, anatomically coherent bodies with controlled muscle definition and no default superhero massing
+character-design-first outfit construction; vary outfit families instead of defaulting to generic fantasy robes
+polished anime game lighting, intentional material separation, and premium but stylized 2D finish
+commercial gacha presentation: finished promotional-quality character illustration, not a model sheet or concept board
+
+## FACE AESTHETIC CONTRACT
+Face Aesthetic Profile: EAST_ASIAN_COMMERCIAL_GACHA_FACE
+Default Face Region Language: East Asian commercial gacha anime facial design language
+Facial Structure Bias: anime-first facial abstraction, restrained facial planes, clean graphic jaw/chin construction
+Facial Style Guardrail: Do not drift toward western facial structure, western illustration-style facial treatment, comic-book facial design, or semi-realistic western portrait language / European-American fantasy portrait language.
+Style Inheritance Policy: NO_FACE_AESTHETIC_INHERITANCE
+
+## CHARACTER VISUAL STYLE
+## Character Visual Style
+clean-line contemporary commercial gacha anime
+
+## CHARACTER IDENTITY
+Fixed user-owned adult female character specification.; anchor: specific head and silhouette identity
+
+## USER EXPLICIT HARD REQUIREMENTS
+Age Group: adult
+Source: human_explicit
+Priority: HARD
+Evidence: 设计一个成年女性角色，我自己选
+Gender Presentation: female
+Source: human_explicit
+Priority: HARD
+Evidence: 女性/女角色/女仆
+
+## OPTIONAL GAME RENDERING STYLE
+Game Rendering Style: genshin_impact
+These are rendering-language deltas only; preserve all character content and explicit user choices.
+Visual detail density is distributed across large structures with frequent secondary clusters.
+Surface detail is distributed at a relatively high frequency across major forms.
+Primary edge transitions combine firm boundaries with softer local transitions.
+Value construction combines clean primary shadow shapes with softer secondary gradients.
+
+## HARD DESIGN SPECIFICATION
+Age Group: adult
+Gender Presentation: female
+
+## STRONG VISUAL DIRECTION
+Character Visual Style: clean-line contemporary commercial gacha anime
+Gender Presentation: female
+Face Aesthetic Profile: EAST_ASIAN_COMMERCIAL_GACHA_FACE
+
+## SOFT CHARACTER INTENT
+Fanservice Level: none
+
+## POSE SPECIFICATION
+Lower Body: open parallel stance
+Weight: balanced
+Torso: front-facing
+Shoulder Line: level relaxed
+Arm Configuration: asymmetric open gesture
+Left Arm: relaxed at side
+Right Arm: extended outward
+Left Hand: relaxed fingers
+Right Hand: open palm outward
+Head: level
+Gaze: direct viewer gaze
+Gesture Energy: open confident
+
+## BACKGROUND SPECIFICATION
+Environment: abstract
+Architecture Presence: none
+Architecture Language: none
+Spatial Structure: layered luminous planes
+Atmosphere: soft haze
+Lighting Context: diffuse commercial key light
+Ground Plane: abstract gradient base
+Depth Structure: soft atmospheric depth
+Complexity: medium
+Dominant Shape Language: clean vertical planes
+
+## POSE
+Pose Family: OPEN_PARALLEL_STANCE
+Leg Crossing Risk: LOW
+Pose: OPEN_PARALLEL_STANCE frontal standee stance with both legs clearly separated with both legs clearly separated and no leg crossover
+
+## POSE INTENT
+Requested Pose Intent: STABLE_OPEN
+Resolved Pose Family: OPEN_PARALLEL_STANCE
+Required Body Language Signals:
+- stable open stance
+Minimum Visible Signals: 1
+Depth Requirement: ANY
+Stance Width Requirement: NORMAL_OR_WIDE
+Asymmetry Requirement: OPTIONAL
+Energy Level: ANY
+Torso Requirement: UPRIGHT_OR_RELAXED
+Arm Requirement: ANY
+Head Requirement: ANY
+Forbidden Pose-Intent Shortcuts:
+- unstable posture
+Pose intent must be visible in actual body language, not only in clothing, styling, or decoration.
+Leg safety remains mandatory and is enforced by the separate LegSeparationContract and actual-image gate.
+
+## LEG GEOMETRY / ANATOMY CONSTRAINT
+## POSITIVE LEG GEOMETRY
+both legs clearly separated
+both thighs independently readable
+both knees independently readable
+both calves independently readable
+both ankles independently readable
+both feet independently readable
+visible negative space between the legs
+neither leg passes across the other
+neither leg overlaps the other
+stable non-crossing stance
+
+## NEGATIVE LEG GEOMETRY — HARD INVARIANT
+no crossed legs
+no crossed thighs
+no crossed knees
+no crossed calves
+no crossed ankles
+no scissor stance
+no intertwined legs
+no overlapping leg silhouette
+no one-leg-in-front-of-the-other crossing
+no fashion-model crossed-leg pose
+
+## Lower-Body Design
+Skin Exposure Strategy: full-leg exposure
+Legwear Family: none
+Leg Accessory Family: none
+Footwear Family: flat ankle boots
+Foot Visibility: shoes fully visible
+
+## NEGATIVE / DO-NOT-SUBSTITUTE
+Background Specification: no castle, cathedral, palace, tower complex, or throne-room architecture
+Right Hand Gesture: do not move this hand to the face
+
+## Negative Constraints
+western comic anatomy
+western superhero proportions
+western fantasy character concept art
+semi-realistic western anime illustration
+realistic facial planes, heavy brow ridge, strongly projected realistic nose, realistic full-lip portrait styling
+painterly fantasy concept rendering
+no crossed legs
+no crossed thighs
+no crossed knees
+no crossed calves
+no crossed ankles
+no scissor stance
+no intertwined legs
+no overlapping leg silhouette
+no one-leg-in-front-of-the-other crossing
+no fashion-model crossed-leg pose

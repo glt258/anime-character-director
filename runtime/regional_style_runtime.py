@@ -1313,6 +1313,9 @@ class PromptBundle:
     game_style_instructions: tuple[str, ...] = ()
     game_style_source_claim_ids: tuple[str, ...] = ()
     game_style_debug_trace: dict[str, Any] = field(default_factory=dict)
+    game_style_rendering_signatures: tuple[dict[str, Any], ...] = ()
+    game_style_requested: str | None = None
+    game_style_fallback_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -1324,6 +1327,7 @@ class PromptBundle:
             "face_aesthetic_guardrails",
             "game_style_instructions",
             "game_style_source_claim_ids",
+            "game_style_rendering_signatures",
         ):
             data[name] = list(data[name])
         pose_contract = data.get("pose_intent_contract")
@@ -1366,6 +1370,8 @@ class PromptCompiler:
         style_inheritance_policy: str | None = None,
         explicit_constraints: Mapping[str, Any] | None = None,
         game_style_fragment: StyleInstructionFragment | Mapping[str, Any] | None = None,
+        game_style_requested: str | None = None,
+        game_style_fallback_reason: str | None = None,
     ) -> PromptBundle:
         firewall = VisualContextFirewall.from_metadata(visual_context_firewall)
         if not firewall.visual_context_firewall_applied:
@@ -1427,6 +1433,7 @@ class PromptCompiler:
         game_fragment = game_style_fragment.to_dict() if isinstance(game_style_fragment, StyleInstructionFragment) else dict(game_style_fragment or {})
         game_instructions = tuple(str(item) for item in game_fragment.get("instructions", ()))
         game_claim_ids = tuple(str(item) for item in game_fragment.get("source_claim_ids", ()))
+        game_rules = tuple(dict(item) for item in game_fragment.get("rules", ()) if isinstance(item, Mapping))
         face_selection = resolve_face_aesthetic_profile(
             visual_contract.face_aesthetic_profile if visual_contract is not None else face_aesthetic_profile,
             source=(visual_contract.face_aesthetic_source if visual_contract is not None else face_aesthetic_source),
@@ -1479,12 +1486,20 @@ class PromptCompiler:
             prompt_lines.extend(
                 (
                     "",
-                    "## OPTIONAL GAME RENDERING STYLE",
-                    f"Game Rendering Style: {game_fragment.get('game_style_id', '')}",
-                    "These are rendering-language deltas only; preserve all character content and explicit user choices.",
-                    *game_instructions,
+                    "## RENDERING SPECIALIZATION",
+                    "Rendering specialization:",
+                    "Technical rendering HOW rules only; preserve character WHAT and explicit user choices.",
                 )
             )
+            for rule in game_rules:
+                prompt_lines.extend(
+                    (
+                        f"- {rule.get('slot', 'RENDERING')} [{rule.get('strength', 'subtle')}]: {rule.get('absolute_instruction', rule.get('text', ''))}",
+                        f"  Contrastive HOW: {rule.get('contrastive_instruction', '')}",
+                    )
+                )
+            if not game_rules:
+                prompt_lines.extend(f"- {item}" for item in game_instructions)
         if visual_contract is not None:
             if visual_contract.hard_constraints:
                 prompt_lines.extend(("", "## HARD DESIGN SPECIFICATION"))
@@ -1662,10 +1677,19 @@ class PromptCompiler:
                 "global_contract": rendering_foundation,
                 "game_specialization": game_fragment.get("game_style_id"),
                 "projected_rules": list(game_instructions),
+                "rendering_signatures": list(game_fragment.get("rendering_signature", ())),
+                "applied_rules": list(game_fragment.get("applied_rules", ())),
+                "adapted_rules": list(game_fragment.get("adapted_rules", ())),
+                "dropped_rules": list(game_fragment.get("dropped_rules", ())),
+                "requested_style": game_style_requested,
+                "fallback_reason": game_style_fallback_reason,
                 "profile_version": game_fragment.get("profile_version"),
                 "projection_version": game_fragment.get("projection_version"),
                 "source_claim_ids": list(game_claim_ids),
             },
+            game_style_rendering_signatures=tuple(dict(item) for item in game_fragment.get("rendering_signature", ()) if isinstance(item, Mapping)),
+            game_style_requested=game_style_requested,
+            game_style_fallback_reason=game_style_fallback_reason,
         )
 
 

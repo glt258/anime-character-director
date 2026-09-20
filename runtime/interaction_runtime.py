@@ -536,23 +536,36 @@ def _extract_constraints(text: str) -> dict[str, Any]:
     if game_match:
         requested = game_match.group("game").strip()
         canonical, original = normalize_game_style_request(requested)
-        constraints.setdefault("explicit_user_fields", [])
-        constraints.setdefault("explicit_constraint_records", {})
         constraints[GAME_STYLE_FIELD] = canonical
         constraints["game_style_id"] = canonical
         constraints["game_style_request"] = original or requested
-        if GAME_STYLE_FIELD not in constraints["explicit_user_fields"]:
-            constraints["explicit_user_fields"].append(GAME_STYLE_FIELD)
-        constraints["explicit_constraint_records"][GAME_STYLE_FIELD] = {
-            "field": GAME_STYLE_FIELD,
-            "value": canonical,
-            "requested_value": requested,
-            "source": "human_explicit",
-            "confidence": 1.0,
-            "raw_evidence": game_match.group(0),
-            "priority": "HARD",
-            "locked": True,
-        }
+        constraints.setdefault("explicit_user_fields", [])
+        constraints.setdefault("explicit_constraint_records", {})
+        if canonical is None:
+            # WHY: an unsupported game name is a valid user request for a
+            # rendering reference, but it has no representable canonical
+            # value.  Recording null as HARD would make the coverage gate
+            # treat graceful fallback as a dropped user constraint.
+            constraints["game_style_fallback_reason"] = "UNSUPPORTED_GAME_STYLE"
+            constraints["game_style_audit"] = {
+                "requested_style": original or requested,
+                "resolved_style_id": None,
+                "fallback_reason": "UNSUPPORTED_GAME_STYLE",
+                "raw_evidence": game_match.group(0),
+            }
+        else:
+            if GAME_STYLE_FIELD not in constraints["explicit_user_fields"]:
+                constraints["explicit_user_fields"].append(GAME_STYLE_FIELD)
+            constraints["explicit_constraint_records"][GAME_STYLE_FIELD] = {
+                "field": GAME_STYLE_FIELD,
+                "value": canonical,
+                "requested_value": requested,
+                "source": "human_explicit",
+                "confidence": 1.0,
+                "raw_evidence": game_match.group(0),
+                "priority": "HARD",
+                "locked": True,
+            }
     if "design direction failure" in text.lower() or "强制失败" in text:
         constraints["force_design_failure"] = True
     return constraints
@@ -2483,23 +2496,49 @@ class InteractionRuntime:
         session.creation_mode = new_mode
         return True
 
+    @staticmethod
+    def _preserve_human_visual_selections(sheet: dict[str, Any]) -> list[str]:
+        """Reset delegated defaults while keeping this run's human choices.
+
+        BACK is an edit of the current run, not a fresh run.  Clearing
+        ``human_custom`` or ``human_select`` here silently changes character
+        identity and makes a later Game Style replacement impossible to
+        complete without re-entering unrelated fields.
+        """
+        human_sources = {"explicit_user", "human_custom", "human_select", "human_mix"}
+        preserved: list[str] = []
+        for name, item in sheet.get("variables", {}).items():
+            if item.get("selection_source") in human_sources:
+                item["locked"] = item.get("selection_source") == "explicit_user"
+                preserved.append(str(name))
+                continue
+            item.update(user_selection=None, selection_source=None, locked=False)
+        return preserved
+
     def _reopen_visual_gate_for_user(self, session: CreativeInteractionSession) -> None:
         sheet = session.visual_preference_sheet or _visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session))
-        for item in sheet.get("variables", {}).values():
-            if item.get("selection_source") not in {"explicit_user"}:
-                item.update(user_selection=None, selection_source=None, locked=False)
+        preserved = self._preserve_human_visual_selections(sheet)
         session.visual_preference_sheet = sheet
         session.final_design = None
         session.design_gate_result = None
         session.compiled_prompt = None
         self._clear_novelty(session)
         session.artifact_status.update({"final_design": "stale", "compiled_prompt": "stale"})
+        session.audit_log.append(
+            {
+                "event": "game_style_projection_invalidated",
+                "reason": "BACK reopened the current Visual Preference Gate",
+                "preserved_human_fields": preserved,
+                "old_compiled_prompt_discarded": True,
+            }
+        )
         session.current_stage = PipelineStage.VISUAL_PREFERENCE_RESOLUTION.value
         session.current_gate = None
         self._open_gate(session, GateType.VISUAL_PREFERENCE_GATE, _visual_gate_options(sheet))
 
     def _rollback(self, session: CreativeInteractionSession, event: InteractionEvent) -> InteractiveResponse:
         target = str(event.payload.get("target", "")).upper()
+        preserved: list[str] = []
         target = {
             "CHARACTER_DIRECTION_GATE": "CHARACTER",
             "ART_DIRECTION_GATE": "ART",
@@ -2529,11 +2568,19 @@ class InteractionRuntime:
                     visual_context_firewall=_session_firewall(session),
                 )
                 # WHY: BACK reopens this same gate; it must preserve explicit
-                # user locks while making delegated/default choices editable.
-                for item in sheet.get("variables", {}).values():
-                    if item.get("selection_source") != "explicit_user":
-                        item.update(user_selection=None, selection_source=None, locked=False)
+                # user-owned choices while making delegated/default choices
+                # editable.  This is the text-action equivalent of the
+                # structured BACK path above.
+                preserved = self._preserve_human_visual_selections(sheet)
                 session.visual_preference_sheet = sheet
+                session.audit_log.append(
+                    {
+                        "event": "game_style_projection_invalidated",
+                        "reason": "BACK reopened the current Visual Preference Gate",
+                        "preserved_human_fields": preserved,
+                        "old_compiled_prompt_discarded": True,
+                    }
+                )
             else:
                 session.visual_preference_sheet = None
             session.resolved_visual_preferences = {}
@@ -2553,7 +2600,7 @@ class InteractionRuntime:
                 session.art_explore_result if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else visual_options,
             )
         self._clear_novelty(session)
-        session.audit_log.append({"event": "rollback_event", "target": target, "invalidated_artifacts": invalidated, "preserved": ["original_user_input", "interaction_history", "previous_choices"]})
+        session.audit_log.append({"event": "rollback_event", "target": target, "invalidated_artifacts": invalidated, "preserved": ["original_user_input", "interaction_history", "previous_choices"], "preserved_human_fields": preserved})
         session.artifact_status.update({name: "stale" for name in invalidated})
         return self._response(session, message="已回到上一个可恢复 Gate；旧设计保留在历史中。")
 
@@ -2658,6 +2705,9 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         "regional_visual_language_source": "default_style_policy",
         "game_style_id": visual.get(GAME_STYLE_FIELD),
         "game_style_request": (session.visual_preference_sheet or {}).get("game_style_request") or session.explicit_user_constraints.get("game_style_request"),
+        "game_style_fallback_reason": session.explicit_user_constraints.get("game_style_fallback_reason"),
+        "game_style_audit": deepcopy(session.explicit_user_constraints.get("game_style_audit") or {}),
+        "explicit_rendering_preferences": deepcopy(session.explicit_user_constraints.get("explicit_rendering_preferences") or {}),
         **face_selection.to_dict(),
         "face_aesthetic_contract": face_selection.to_dict(),
         "lower_body": lower_body,
@@ -2667,7 +2717,7 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         **firewall.to_dict(),
     }
     for key, value in session.explicit_user_constraints.items():
-        if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "explicit_constraint_records", "raw_hard_constraints", "constraint_conflicts", "positive_constraints", "negative_constraints", "prohibited", "prohibited_constraints", "constraint_provenance", GAME_STYLE_FIELD, "game_style_id", "game_style_request"}:
+        if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "explicit_constraint_records", "raw_hard_constraints", "constraint_conflicts", "positive_constraints", "negative_constraints", "prohibited", "prohibited_constraints", "constraint_provenance", GAME_STYLE_FIELD, "game_style_id", "game_style_request", "game_style_fallback_reason", "game_style_audit", "explicit_rendering_preferences"}:
             design.setdefault("visual_preferences", {})[key] = value
             design["provenance"][key] = "explicit_user"
             if key in lower_body:
@@ -2714,6 +2764,7 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
             "face_aesthetic_contract": face_selection.to_dict(),
             "game_style_id": design.get("game_style_id"),
             "game_style_request": design.get("game_style_request"),
+            "game_style_fallback_reason": design.get("game_style_fallback_reason"),
         }
     )
     session.face_aesthetic_contract = face_selection.to_dict()
@@ -2786,6 +2837,8 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
         "visual_specification_contract": contract,
         "explicit_constraints": explicit_records,
         "game_style_fragment": game_fragment,
+        "game_style_requested": final_design.get("game_style_request"),
+        "game_style_fallback_reason": final_design.get("game_style_fallback_reason"),
         "visual_context_firewall": {name: deepcopy(final_design.get(name)) for name in ("inherit_previous_visuals", "allowed_visual_inheritance", "blocked_context_sources", "visual_context_firewall_applied", "style_inheritance_policy")},
     }
 

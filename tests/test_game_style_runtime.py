@@ -14,6 +14,7 @@ from runtime.game_style_runtime import (
     GAME_STYLE_FIELD,
     PROFILE_VERSION,
     PROJECTION_VERSION,
+    RENDERING_SIGNATURE_SLOTS,
     game_style_registry,
     migrate_game_style_fields,
     project_game_style,
@@ -72,8 +73,10 @@ def test_profile_schema_valid_on_load() -> None:
         assert profile.source_analysis_version
         assert profile.sample_manifest_version
         assert profile.integration_review_version
-        assert len(profile.core_rendering_instructions) <= 6
-        assert len(profile.supporting_art_direction_instructions) <= 3
+        assert 5 <= len(profile.core_rendering_instructions) <= 8
+        assert len(profile.supporting_art_direction_instructions) <= 2
+        assert set(RENDERING_SIGNATURE_SLOTS[:12]).issubset({item.slot for item in profile.rendering_signature})
+        assert all(item["strength"] in {"strong", "medium", "subtle"} for item in profile.core_rendering_instructions)
 
 
 def test_registry_has_no_duplicate_alias() -> None:
@@ -83,7 +86,7 @@ def test_registry_has_no_duplicate_alias() -> None:
 
 @pytest.mark.parametrize(
     ("name", "count"),
-    (("genshin_impact", 4), ("zenless_zone_zero", 4), ("wuthering_waves", 4), ("neverness_to_everness", 3)),
+    (("genshin_impact", 5), ("zenless_zone_zero", 5), ("wuthering_waves", 5), ("neverness_to_everness", 5)),
 )
 def test_projection_counts(name: str, count: int) -> None:
     fragment = project_game_style(game_style_registry().profiles[name], CharacterDesignContext())
@@ -93,26 +96,26 @@ def test_projection_counts(name: str, count: int) -> None:
 
 def test_genshin_projection() -> None:
     fragment = project_game_style(resolve_game_style("Genshin") , CharacterDesignContext())
-    assert len(fragment.instructions) == 4
+    assert len(fragment.instructions) == 5
     assert "rendering_shading_hybrid" in fragment.source_claim_ids
 
 
 def test_zzz_projection() -> None:
     fragment = project_game_style(resolve_game_style("ZZZ"), CharacterDesignContext())
-    assert len(fragment.instructions) == 4
+    assert len(fragment.instructions) == 5
     assert "rendering_edge_treatment_soft" in fragment.source_claim_ids
 
 
 def test_wuwa_projection() -> None:
     fragment = project_game_style(resolve_game_style("鸣潮"), CharacterDesignContext())
-    assert len(fragment.instructions) == 4
+    assert len(fragment.instructions) == 5
     assert fragment.game_style_id == "wuthering_waves"
 
 
 def test_nte_projection() -> None:
     fragment = project_game_style(resolve_game_style("NTE"), CharacterDesignContext())
-    assert len(fragment.instructions) == 3
-    assert fragment.supporting_instructions
+    assert len(fragment.instructions) == 5
+    assert not fragment.supporting_instructions
 
 
 def test_projection_uses_only_game_specific_claims() -> None:
@@ -307,8 +310,9 @@ def test_game_style_prompt_diff_only_rendering() -> None:
     default = _compile().prompt
     genshin = _compile(project_game_style(resolve_game_style("原神"), CharacterDesignContext())).prompt
     assert "pink long hair" in default and "pink long hair" in genshin
-    assert "## OPTIONAL GAME RENDERING STYLE" not in default
-    assert "## OPTIONAL GAME RENDERING STYLE" in genshin
+    assert "## RENDERING SPECIALIZATION" not in default
+    assert "## RENDERING SPECIALIZATION" in genshin
+    assert "Rendering specialization:" in genshin
 
 
 def test_game_style_debug_trace() -> None:
@@ -316,7 +320,7 @@ def test_game_style_debug_trace() -> None:
     trace = bundle.to_dict()["game_style_debug_trace"]
     assert trace["global_contract"] == "CONTEMPORARY_COMMERCIAL_GACHA_ANIME"
     assert trace["game_specialization"] == "wuthering_waves"
-    assert len(trace["projected_rules"]) == 4
+    assert len(trace["projected_rules"]) == 5
 
 
 def test_runtime_does_not_depend_on_research_repository() -> None:
