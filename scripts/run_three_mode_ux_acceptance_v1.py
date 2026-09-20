@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.repository_guard import require_development_repository  # noqa: E402
 from runtime.interaction_runtime import (  # noqa: E402
     CreationMode,
     InteractionAction,
@@ -794,6 +795,9 @@ def report(results: list[dict[str, Any]]) -> str:
 
 
 def main() -> int:
+    # WHY: this suite creates acceptance artifacts and is a development tool;
+    # prevent accidentally treating the installed C: copy as source code.
+    require_development_repository(ROOT)
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, Any]] = []
     manifest: list[dict[str, Any]] = []

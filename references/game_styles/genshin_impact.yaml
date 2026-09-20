@@ -1,0 +1,32 @@
+schema_version: game_style_profile_v1
+profile_version: game_style_profile_v1
+source_analysis_version: four_game_style_analysis_run_v1
+sample_manifest_version: style_analysis_sample_v1
+integration_review_version: game_style_integration_gate_v1
+game:
+  id: genshin_impact
+  display_name: Genshin Impact
+projection:
+  core_rendering_instructions:
+    - claim_id: art_direction_detail_density_high
+      rule_strength: hard
+      text: Visual detail density is distributed across large structures with frequent secondary clusters.
+    - claim_id: rendering_texture_detail_high
+      rule_strength: hard
+      text: Surface detail is distributed at a relatively high frequency across major forms.
+    - claim_id: rendering_edge_treatment_semi_hard
+      rule_strength: hard
+      text: Primary edge transitions combine firm boundaries with softer local transitions.
+    - claim_id: rendering_shading_hybrid
+      rule_strength: hard
+      text: Value construction combines clean primary shadow shapes with softer secondary gradients.
+  supporting_art_direction_instructions: []
+  excluded_global_baseline_claim_ids:
+    - rendering_color_structure_low
+    - rendering_depth_treatment_high
+    - art_direction_shape_hierarchy_high
+    - art_direction_surface_organization_hierarchical
+  prompt_budget:
+    core_max: 6
+    supporting_max: 3
+    projected_total: 4

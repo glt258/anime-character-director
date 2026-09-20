@@ -8,6 +8,8 @@
     "explicit_user_request": {"type": "boolean"},
     "global_rendering_style": {"type": "string"},
     "global_rendering_style_source": {"type": "string"},
+    "game_style_id": {"type": ["string", "null"]},
+    "game_style_request": {"type": ["string", "null"]},
     "regional_visual_language": {
       "enum": [
         "EAST_ASIAN_CONTEMPORARY_GACHA",

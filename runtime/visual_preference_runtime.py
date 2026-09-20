@@ -22,6 +22,7 @@ try:
     )
     from .leg_separation_runtime import migrate_leg_separation_fields, validate_pose_options
     from .pose_intent_runtime import migrate_pose_intent_fields, normalize_pose_intent_contract, resolve_pose_intent
+    from .game_style_runtime import GAME_STYLE_FIELD, migrate_game_style_fields, normalize_game_style_request
 except ImportError:  # pragma: no cover - supports direct host imports
     from regional_style_runtime import (  # type: ignore
         DEFAULT_FACE_AESTHETIC_PROFILE,
@@ -36,6 +37,7 @@ except ImportError:  # pragma: no cover - supports direct host imports
     )
     from leg_separation_runtime import migrate_leg_separation_fields, validate_pose_options  # type: ignore
     from pose_intent_runtime import migrate_pose_intent_fields, normalize_pose_intent_contract, resolve_pose_intent  # type: ignore
+    from game_style_runtime import GAME_STYLE_FIELD, migrate_game_style_fields, normalize_game_style_request  # type: ignore
 
 
 USER_OWNED_IDENTITY_VARIABLES = (
@@ -248,6 +250,7 @@ class VisualPreferenceSession:
         pose_migrated_sheet, pose_event = migrate_pose_intent_fields(leg_migrated_sheet)
         migrated_sheet, migration_event = migrate_regional_style_fields(pose_migrated_sheet)
         migrated_sheet, face_event = migrate_face_aesthetic_fields(migrated_sheet)
+        migrated_sheet, game_style_event = migrate_game_style_fields(migrated_sheet)
         validate_sheet(migrated_sheet)
         self.sheet = deepcopy(migrated_sheet)
         if migration_event:
@@ -258,6 +261,8 @@ class VisualPreferenceSession:
             self.history.append(pose_event)
         if face_event:
             self.history.append(face_event)
+        if game_style_event:
+            self.history.append(game_style_event)
         for item in self.sheet["variables"].values():
             item.setdefault("user_selection", None)
             item.setdefault("selection_source", None)
@@ -283,7 +288,7 @@ class VisualPreferenceSession:
     ) -> None:
         if self.state != "AWAITING_VISUAL_PREFERENCE_SELECTION" or self.sheet is None:
             raise GateError("visual preference selection is not open")
-        if variable not in IDENTITY_VARIABLES:
+        if variable != GAME_STYLE_FIELD and variable not in IDENTITY_VARIABLES:
             raise GateError(f"{variable} is not a blocking identity variable")
         choices = [option for option in self.sheet["variables"][variable]["options"] if option.get("id") == option_id]
         if option_id and not choices:
@@ -305,6 +310,11 @@ class VisualPreferenceSession:
             selection, source = mix, "mix"
         else:
             selection, source = item["recommended"], "ai_delegate"
+        if variable == GAME_STYLE_FIELD:
+            selection, request = normalize_game_style_request(selection)
+            item["requested_value"] = request or selection
+            self.sheet["game_style_id"] = selection
+            self.sheet["game_style_request"] = request or selection
         item.update(user_selection=selection, selection_source=source, locked=False)
 
     def lock(self) -> dict[str, Any]:
@@ -376,6 +386,19 @@ def render_report(sheet: dict[str, Any], state: str, audit: dict[str, Any] | Non
         "## Identity Variables",
         "",
     ]
+    game_item = sheet.get("variables", {}).get(GAME_STYLE_FIELD)
+    if game_item:
+        lines.extend(
+            [
+                "## Game Rendering Style",
+                "",
+                "- Optional rendering specialization derived from reviewed reference profiles.",
+                "- It changes rendering language only; it does not control character identity, hair, body, clothing, footwear, sexiness, or nonhuman traits.",
+                f"- Selected canonical ID: `{sheet.get('game_style_id', game_item.get('user_selection'))}`",
+                f"- Original request: `{sheet.get('game_style_request', game_item.get('requested_value'))}`",
+                "",
+            ]
+        )
     for name in IDENTITY_VARIABLES:
         item = sheet["variables"][name]
         lines.extend([

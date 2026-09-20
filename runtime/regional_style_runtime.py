@@ -12,6 +12,7 @@ from typing import Any, Mapping, Sequence
 from datetime import datetime, timezone
 
 try:
+    from .game_style_runtime import StyleInstructionFragment
     from .leg_separation_runtime import (
         DEFAULT_LEG_SEPARATION_CONTRACT,
         LEG_GEOMETRY_NEGATIVE,
@@ -40,6 +41,7 @@ try:
     )
     from .visual_context_firewall import VisualContextFirewall
 except ImportError:  # pragma: no cover - supports direct host imports
+    from game_style_runtime import StyleInstructionFragment  # type: ignore
     from leg_separation_runtime import (  # type: ignore
         DEFAULT_LEG_SEPARATION_CONTRACT,
         LEG_GEOMETRY_NEGATIVE,
@@ -1305,6 +1307,12 @@ class PromptBundle:
     explicit_constraint_coverage: dict[str, dict[str, Any]] = field(default_factory=dict)
     explicit_constraint_locks: dict[str, Any] = field(default_factory=dict)
     generation_allowed: bool = True
+    game_style_id: str | None = None
+    game_style_profile_version: str | None = None
+    game_style_projection_version: str | None = None
+    game_style_instructions: tuple[str, ...] = ()
+    game_style_source_claim_ids: tuple[str, ...] = ()
+    game_style_debug_trace: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -1314,6 +1322,8 @@ class PromptBundle:
             "lower_body_constraints",
             "leg_geometry_constraints",
             "face_aesthetic_guardrails",
+            "game_style_instructions",
+            "game_style_source_claim_ids",
         ):
             data[name] = list(data[name])
         pose_contract = data.get("pose_intent_contract")
@@ -1325,7 +1335,7 @@ class PromptBundle:
 
 
 class PromptCompiler:
-    """Compile three ordered style layers into natural-language constraints."""
+    """Compile global, regional, character, and optional rendering deltas."""
 
     def __init__(self, policy: Mapping[str, Any] | None = None) -> None:
         self.policy = policy or DEFAULT_REGIONAL_STYLE_POLICY
@@ -1355,6 +1365,7 @@ class PromptCompiler:
         face_aesthetic_source: str | FaceAestheticSource | None = None,
         style_inheritance_policy: str | None = None,
         explicit_constraints: Mapping[str, Any] | None = None,
+        game_style_fragment: StyleInstructionFragment | Mapping[str, Any] | None = None,
     ) -> PromptBundle:
         firewall = VisualContextFirewall.from_metadata(visual_context_firewall)
         if not firewall.visual_context_firewall_applied:
@@ -1413,6 +1424,9 @@ class PromptCompiler:
             review_lower_body_design(lower_body, age_group=age_group, fanservice_level=fanservice_level)
             lower_body_constraints = _lower_body_prompt_lines(lower_body_variables)
         visual_contract = _normalize_visual_specification_contract(visual_specification_contract)
+        game_fragment = game_style_fragment.to_dict() if isinstance(game_style_fragment, StyleInstructionFragment) else dict(game_style_fragment or {})
+        game_instructions = tuple(str(item) for item in game_fragment.get("instructions", ()))
+        game_claim_ids = tuple(str(item) for item in game_fragment.get("source_claim_ids", ()))
         face_selection = resolve_face_aesthetic_profile(
             visual_contract.face_aesthetic_profile if visual_contract is not None else face_aesthetic_profile,
             source=(visual_contract.face_aesthetic_source if visual_contract is not None else face_aesthetic_source),
@@ -1461,6 +1475,16 @@ class PromptCompiler:
                         f"Evidence: {record.get('raw_evidence', '')}",
                     )
                 )
+        if game_instructions:
+            prompt_lines.extend(
+                (
+                    "",
+                    "## OPTIONAL GAME RENDERING STYLE",
+                    f"Game Rendering Style: {game_fragment.get('game_style_id', '')}",
+                    "These are rendering-language deltas only; preserve all character content and explicit user choices.",
+                    *game_instructions,
+                )
+            )
         if visual_contract is not None:
             if visual_contract.hard_constraints:
                 prompt_lines.extend(("", "## HARD DESIGN SPECIFICATION"))
@@ -1629,6 +1653,19 @@ class PromptCompiler:
                 for name, record in dict(explicit_constraints or {}).items()
             },
             explicit_constraint_locks=deepcopy(dict(explicit_constraints or {})),
+            game_style_id=game_fragment.get("game_style_id"),
+            game_style_profile_version=game_fragment.get("profile_version"),
+            game_style_projection_version=game_fragment.get("projection_version"),
+            game_style_instructions=game_instructions,
+            game_style_source_claim_ids=game_claim_ids,
+            game_style_debug_trace={
+                "global_contract": rendering_foundation,
+                "game_specialization": game_fragment.get("game_style_id"),
+                "projected_rules": list(game_instructions),
+                "profile_version": game_fragment.get("profile_version"),
+                "projection_version": game_fragment.get("projection_version"),
+                "source_claim_ids": list(game_claim_ids),
+            },
         )
 
 

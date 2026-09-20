@@ -35,6 +35,17 @@ try:
         IDENTITY_VARIABLES,
         VisualPreferenceSession,
     )
+    from .game_style_runtime import (
+        GAME_STYLE_FIELD,
+        CharacterDesignContext,
+        game_style_gate_variable,
+        migrate_game_style_fields,
+        normalize_game_style_request,
+        project_game_style,
+        resolve_game_style,
+        unsupported_game_style_message,
+        validate_game_style_preference_preservation,
+    )
     from .natural_language_interaction import ExplicitConstraintExtractor, NaturalLanguageInteractionParser
     from .interaction_candidates import (
         BACKGROUND_SPECIFICATION_FIELDS,
@@ -77,6 +88,17 @@ except ImportError:  # pragma: no cover - supports direct host imports
         AI_PROPOSED_OPTIONAL_VARIABLES,
         IDENTITY_VARIABLES,
         VisualPreferenceSession,
+    )
+    from game_style_runtime import (  # type: ignore
+        GAME_STYLE_FIELD,
+        CharacterDesignContext,
+        game_style_gate_variable,
+        migrate_game_style_fields,
+        normalize_game_style_request,
+        project_game_style,
+        resolve_game_style,
+        unsupported_game_style_message,
+        validate_game_style_preference_preservation,
     )
     from natural_language_interaction import ExplicitConstraintExtractor, NaturalLanguageInteractionParser  # type: ignore
     from interaction_candidates import (  # type: ignore
@@ -420,7 +442,11 @@ class CreativeInteractionSession:
             values["artifact_continuity"] = ARTIFACT_CONTINUITY_LEGACY
         if raw.get("generation_artifact") and isinstance(raw.get("generation_artifact"), Mapping):
             values["generation_artifact"] = deepcopy(dict(raw["generation_artifact"]))
-        return cls(**values)
+        session = cls(**values)
+        if isinstance(session.visual_preference_sheet, Mapping):
+            migrated_sheet, _ = migrate_game_style_fields(session.visual_preference_sheet)
+            session.visual_preference_sheet = migrated_sheet
+        return session
 
 
 def _session_firewall(session: CreativeInteractionSession) -> VisualContextFirewall:
@@ -485,6 +511,48 @@ def detect_creation_mode(user_input: str, explicit_mode: str | CreationMode | No
 
 def _extract_constraints(text: str) -> dict[str, Any]:
     constraints = ExplicitConstraintExtractor().extract(text)
+    # Game style is opt-in.  Requiring rendering-language words avoids treating
+    # a game title mentioned as character lore as a style selection.
+    game_match = re.search(
+        r"(?:按|参考|像|使用|采用|use|render(?:ing)?(?:\s+style)?(?:\s+of)?|style(?:d)?\s+like)\s*"
+        r"(?P<game>原神|genshin(?:\s+impact)?|绝区零|zzz|zenless\s+zone\s+zero|鸣潮|wuthering\s+waves|wWuA|异环|nte|neverness\s+to\s+everness|崩坏\s*[:：]?\s*星穹铁道)"
+        r"\s*(?:画风|画法|渲染|rendering|style)?",
+        text,
+        re.IGNORECASE,
+    )
+    if game_match is None:
+        game_match = re.search(
+            r"(?P<game>原神|genshin(?:\s+impact)?|绝区零|zzz|zenless\s+zone\s+zero|鸣潮|wuthering\s+waves|wWuA|异环|nte|neverness\s+to\s+everness)\s*"
+            r"(?:画风|画法|渲染|rendering|style)",
+            text,
+            re.IGNORECASE,
+        )
+    if game_match is None:
+        game_match = re.search(
+            r"(?:按|参考|像|使用|采用|use|style(?:d)?\s+like)\s*(?P<game>[^,，。.!！;；\n]{1,32})\s*(?:画风|画法|渲染|rendering|style)",
+            text,
+            re.IGNORECASE,
+        )
+    if game_match:
+        requested = game_match.group("game").strip()
+        canonical, original = normalize_game_style_request(requested)
+        constraints.setdefault("explicit_user_fields", [])
+        constraints.setdefault("explicit_constraint_records", {})
+        constraints[GAME_STYLE_FIELD] = canonical
+        constraints["game_style_id"] = canonical
+        constraints["game_style_request"] = original or requested
+        if GAME_STYLE_FIELD not in constraints["explicit_user_fields"]:
+            constraints["explicit_user_fields"].append(GAME_STYLE_FIELD)
+        constraints["explicit_constraint_records"][GAME_STYLE_FIELD] = {
+            "field": GAME_STYLE_FIELD,
+            "value": canonical,
+            "requested_value": requested,
+            "source": "human_explicit",
+            "confidence": 1.0,
+            "raw_evidence": game_match.group(0),
+            "priority": "HARD",
+            "locked": True,
+        }
     if "design direction failure" in text.lower() or "强制失败" in text:
         constraints["force_design_failure"] = True
     return constraints
@@ -790,6 +858,15 @@ def _visual_sheet(
             selection_source="explicit_user",
             locked=True,
         )
+    game_request = constraints.get("game_style_request")
+    game_selected = constraints.get("game_style_id", constraints.get(GAME_STYLE_FIELD))
+    game_source = "explicit_user" if GAME_STYLE_FIELD in constraints.get("explicit_user_fields", ()) else None
+    variables[GAME_STYLE_FIELD] = game_style_gate_variable(
+        game_selected or game_request,
+        source=game_source,
+    )
+    if game_request:
+        variables[GAME_STYLE_FIELD]["requested_value"] = game_request
     return {
         "schema_version": "1.0.0",
         **firewall.to_dict(),
@@ -798,6 +875,8 @@ def _visual_sheet(
         **face_selection.to_dict(),
         "face_aesthetic_contract": face_selection.to_dict(),
         "explicit_user_request": bool(set(constraints) - {"raw"}),
+        "game_style_id": variables[GAME_STYLE_FIELD].get("user_selection"),
+        "game_style_request": variables[GAME_STYLE_FIELD].get("requested_value"),
         "variables": variables,
         "optional_variables": {
             name: {"current_ai_proposal": values.get(name, "policy default"), "alternative_suggestions": [], "user_override_allowed": True}
@@ -805,7 +884,7 @@ def _visual_sheet(
             if name not in variables
         },
         "ai_implementation_variables": list(AI_IMPLEMENTATION_VARIABLES),
-        "user_controlled_variables": list(user_fields),
+        "user_controlled_variables": [*user_fields, GAME_STYLE_FIELD],
         "lower_body_visual_variables": {name: values[name] for name in ("exposure_strategy", "legwear_family", "leg_accessory_family", "footwear_family", "foot_visibility", "visual_reason", "relationship_to_character_style", "relationship_to_pose", "repetition_risk")},
         "pose_intent": values["pose_intent"],
         "design_dna": deepcopy(design_dna),
@@ -1016,7 +1095,15 @@ def _candidate_resolution(session: CreativeInteractionSession, gate: str, event:
 
 
 def _resolved_values(sheet: Mapping[str, Any]) -> dict[str, Any]:
-    return {name: item.get("user_selection") for name, item in sheet.get("variables", {}).items() if item.get("user_selection") is not None}
+    values = {
+        name: item.get("user_selection")
+        for name, item in sheet.get("variables", {}).items()
+        if item.get("user_selection") is not None
+        or (name == GAME_STYLE_FIELD and item.get("selection_source") is not None)
+    }
+    if GAME_STYLE_FIELD in values:
+        values[GAME_STYLE_FIELD] = sheet.get("game_style_id")
+    return values
 
 
 STRUCTURED_VISUAL_FIELDS = frozenset((*POSE_SPECIFICATION_FIELDS, *BACKGROUND_SPECIFICATION_FIELDS))
@@ -1045,11 +1132,17 @@ def _apply_visual_value(sheet: dict[str, Any], name: str, *, source: str, option
         if not mix:
             raise ValueError("mix must contain at least one value")
         value = mix
-    if value is None:
+    if value is None and name != GAME_STYLE_FIELD:
         raise ValueError(f"{name} requires option_id or value")
     if source == "human_custom" and not item.get("allow_custom", False):
         raise ValueError(f"custom selection is disabled for {name}")
-    item.update(user_selection=deepcopy(value), selection_source=source, locked=False)
+    if name == GAME_STYLE_FIELD:
+        canonical, request = normalize_game_style_request(value)
+        item.update(user_selection=canonical, requested_value=request or value, selection_source=source, locked=False)
+        sheet["game_style_id"] = canonical
+        sheet["game_style_request"] = request or value
+    else:
+        item.update(user_selection=deepcopy(value), selection_source=source, locked=False)
 
 
 def _apply_visual_update(sheet: dict[str, Any], name: str, update: Any, default_source: str) -> None:
@@ -1131,7 +1224,12 @@ def _apply_visual_event(session: CreativeInteractionSession, event: InteractionE
     else:
         raise ValueError(f"unsupported visual preference action: {event.action}")
     session.visual_preference_sheet = sheet
-    unresolved = [name for name, item in sheet["variables"].items() if item.get("user_visible") and item.get("user_selection") is None]
+    unresolved = [
+        name for name, item in sheet["variables"].items()
+        if item.get("user_visible")
+        and item.get("user_selection") is None
+        and not (name == GAME_STYLE_FIELD and item.get("selection_source") is not None)
+    ]
     if unresolved:
         return GateResolution(session.current_gate or "", gate, ResolutionStatus.PARTIALLY_RESOLVED.value, {"variables": _resolved_values(sheet)}, unresolved_fields=unresolved, rationale="The sheet remains open so the user can resolve more visible fields.")
     _lock_with_existing_gate(sheet)
@@ -2092,6 +2190,25 @@ class InteractionRuntime:
             data.setdefault("event_id", uuid4().hex)
             return InteractionEvent.from_dict(data)
         text = str(event).strip()
+        if session.gate_payload.get("gate_type") == GateType.VISUAL_PREFERENCE_GATE.value:
+            game_constraints = _extract_constraints(text)
+            if GAME_STYLE_FIELD in game_constraints:
+                return InteractionEvent(
+                    uuid4().hex,
+                    session.session_id,
+                    session.current_gate or "",
+                    InteractionAction.SELECT.value,
+                    {
+                        "field_updates": {
+                            GAME_STYLE_FIELD: {
+                                "value": game_constraints.get("game_style_id") or game_constraints.get("game_style_request"),
+                                "requested_value": game_constraints.get("game_style_request"),
+                                "source": "human_select",
+                            }
+                        },
+                        "raw_text": text,
+                    },
+                )
         context = {
             "current_stage": session.current_stage,
             "current_gate": session.current_gate,
@@ -2243,6 +2360,14 @@ class InteractionRuntime:
                         error_code=error.code,
                     )
                 session.compiled_prompt = compiled.to_dict()
+                validate_game_style_preference_preservation(
+                    session.compiled_prompt,
+                    CharacterDesignContext(explicit_preferences=(session.final_design or {}).get("visual_preferences") or {}),
+                )
+                if isinstance(session.final_design, dict):
+                    session.final_design.setdefault("generation_context", {})["rendering_style_trace"] = deepcopy(
+                        session.compiled_prompt.get("game_style_debug_trace", {})
+                    )
                 coverage = ExplicitConstraintCoverageGate.evaluate(session.compiled_prompt)
                 session.compiled_prompt["explicit_constraint_coverage"] = coverage
                 session.compiled_prompt["generation_allowed"] = coverage["generation_allowed"]
@@ -2337,6 +2462,8 @@ class InteractionRuntime:
             "explicit_constraints": deepcopy(session.explicit_user_constraints),
             "candidate_generator_version": CANDIDATE_GENERATOR_VERSION if gate != GateType.VISUAL_PREFERENCE_GATE else None,
             "candidate_revision": session.candidate_revisions.get("character_explore" if gate == GateType.CHARACTER_DIRECTION_GATE else "art_explore", 0),
+            "game_style_id": (session.visual_preference_sheet or {}).get("game_style_id"),
+            "game_style_request": (session.visual_preference_sheet or {}).get("game_style_request"),
         }
         session.unresolved_fields = _gate_unresolved(session)
         session.status = _waiting_status(session.current_gate) if session.creation_mode == CreationMode.USER_DECIDE.value else SessionStatus.RUNNING.value
@@ -2394,13 +2521,37 @@ class InteractionRuntime:
             self._open_gate(session, GateType.CHARACTER_DIRECTION_GATE, session.character_explore_result)
         else:
             invalidated = ["visual_preference_sheet", "resolved_visual_preferences", "final_design", "design_gate_result", "compiled_prompt"]
-            session.visual_preference_sheet = None
+            if target in {"VISUAL", "VISUAL_PREFERENCE"}:
+                sheet = session.visual_preference_sheet or _visual_sheet(
+                    session.explicit_user_constraints,
+                    original_input=session.original_user_input,
+                    prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}],
+                    visual_context_firewall=_session_firewall(session),
+                )
+                # WHY: BACK reopens this same gate; it must preserve explicit
+                # user locks while making delegated/default choices editable.
+                for item in sheet.get("variables", {}).values():
+                    if item.get("selection_source") != "explicit_user":
+                        item.update(user_selection=None, selection_source=None, locked=False)
+                session.visual_preference_sheet = sheet
+            else:
+                session.visual_preference_sheet = None
             session.resolved_visual_preferences = {}
             session.final_design = None
             session.design_gate_result = None
             session.compiled_prompt = None
             session.current_stage = PipelineStage.VISUAL_PREFERENCE_RESOLUTION.value if target in {"VISUAL", "VISUAL_PREFERENCE"} else PipelineStage.ART_DIRECTION_RESOLUTION.value
-            self._open_gate(session, GateType.ART_DIRECTION_GATE if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else GateType.VISUAL_PREFERENCE_GATE, session.art_explore_result if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else _visual_gate_options(_visual_sheet(session.explicit_user_constraints, original_input=session.original_user_input, prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}], visual_context_firewall=_session_firewall(session))))
+            visual_options = _visual_gate_options(session.visual_preference_sheet or _visual_sheet(
+                session.explicit_user_constraints,
+                original_input=session.original_user_input,
+                prior_resolutions=[{"direction": session.selected_character_direction}, {"direction": session.selected_art_direction}],
+                visual_context_firewall=_session_firewall(session),
+            ))
+            self._open_gate(
+                session,
+                GateType.ART_DIRECTION_GATE if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else GateType.VISUAL_PREFERENCE_GATE,
+                session.art_explore_result if session.current_stage == PipelineStage.ART_DIRECTION_RESOLUTION.value else visual_options,
+            )
         self._clear_novelty(session)
         session.audit_log.append({"event": "rollback_event", "target": target, "invalidated_artifacts": invalidated, "preserved": ["original_user_input", "interaction_history", "previous_choices"]})
         session.artifact_status.update({name: "stale" for name in invalidated})
@@ -2430,7 +2581,12 @@ def _gate_unresolved(session: CreativeInteractionSession) -> list[str]:
     if gate in {GateType.CHARACTER_DIRECTION_GATE.value, GateType.ART_DIRECTION_GATE.value}:
         return ["direction"]
     if gate == GateType.VISUAL_PREFERENCE_GATE.value:
-        return [name for name, item in (session.visual_preference_sheet or {}).get("variables", {}).items() if item.get("user_visible") and item.get("user_selection") is None]
+        return [
+            name for name, item in (session.visual_preference_sheet or {}).get("variables", {}).items()
+            if item.get("user_visible")
+            and item.get("user_selection") is None
+            and not (name == GAME_STYLE_FIELD and item.get("selection_source") is not None)
+        ]
     return []
 
 
@@ -2443,7 +2599,7 @@ def _visual_gate_options(sheet: Mapping[str, Any]) -> list[dict[str, Any]]:
             "recommendation_reason": item.get("recommendation_reason"),
             "recommendation_reason_en": item.get("recommendation_reason_en"),
             "locked": bool(item.get("locked")),
-            "resolved": item.get("user_selection") is not None,
+            "resolved": item.get("user_selection") is not None or (name == GAME_STYLE_FIELD and item.get("selection_source") is not None),
         }
         for name, item in sheet.get("variables", {}).items()
         if item.get("user_visible") and item.get("selection_source") != "explicit_user"
@@ -2467,7 +2623,9 @@ def _message(session: CreativeInteractionSession) -> str:
     if session.status == SessionStatus.CANCELLED.value:
         return "这个角色设计 Session 已取消。"
     if session.status == SessionStatus.GENERATION_READY.value:
-        return "设计已完成并通过 Playable Character Design Gate，已到 GENERATION_READY；本轮未调用 imagegen。"
+        message = "设计已完成并通过 Playable Character Design Gate，已到 GENERATION_READY；本轮未调用 imagegen。"
+        fallback = (session.final_design or {}).get("unsupported_game_style_message")
+        return f"{fallback} {message}" if fallback else message
     if session.status == SessionStatus.AWAITING_CHARACTER_DIRECTION.value:
         return "这里有几个角色方向。请选择一个，也可以 MIX、CUSTOM 或 DELEGATE。"
     if session.status == SessionStatus.AWAITING_ART_DIRECTION.value:
@@ -2498,6 +2656,8 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         "pose_family": design_dna.get("pose_family", visual.get("pose_family", "OPEN_PARALLEL_STANCE")),
         "regional_visual_language": DEFAULT_REGIONAL_VISUAL_LANGUAGE,
         "regional_visual_language_source": "default_style_policy",
+        "game_style_id": visual.get(GAME_STYLE_FIELD),
+        "game_style_request": (session.visual_preference_sheet or {}).get("game_style_request") or session.explicit_user_constraints.get("game_style_request"),
         **face_selection.to_dict(),
         "face_aesthetic_contract": face_selection.to_dict(),
         "lower_body": lower_body,
@@ -2507,13 +2667,14 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
         **firewall.to_dict(),
     }
     for key, value in session.explicit_user_constraints.items():
-        if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "explicit_constraint_records", "raw_hard_constraints", "constraint_conflicts", "positive_constraints", "negative_constraints", "prohibited", "prohibited_constraints", "constraint_provenance"}:
+        if key not in {"raw", "force_design_failure", "gender", "age_group", "explicit_user_fields", "explicit_constraint_records", "raw_hard_constraints", "constraint_conflicts", "positive_constraints", "negative_constraints", "prohibited", "prohibited_constraints", "constraint_provenance", GAME_STYLE_FIELD, "game_style_id", "game_style_request"}:
             design.setdefault("visual_preferences", {})[key] = value
             design["provenance"][key] = "explicit_user"
             if key in lower_body:
                 design["lower_body"][key] = value
     design["age_group"] = session.explicit_user_constraints.get("age_group", "adult")
     design["explicit_user_constraints"] = deepcopy(session.explicit_user_constraints)
+    design["unsupported_game_style_message"] = unsupported_game_style_message(design.get("game_style_request"))
     explicit_records = deepcopy(session.explicit_user_constraints.get("explicit_constraint_records") or {})
     for index, record in enumerate(session.explicit_user_constraints.get("raw_hard_constraints") or ()):
         explicit_records[f"raw_hard_constraint_{index}"] = deepcopy(record)
@@ -2551,6 +2712,8 @@ def _build_final_design(session: CreativeInteractionSession) -> dict[str, Any]:
             "visual_specification_contract": visual_contract.to_dict(),
             "prompt_adherence_manifest": visual_contract.to_dict(),
             "face_aesthetic_contract": face_selection.to_dict(),
+            "game_style_id": design.get("game_style_id"),
+            "game_style_request": design.get("game_style_request"),
         }
     )
     session.face_aesthetic_contract = face_selection.to_dict()
@@ -2584,6 +2747,26 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
             explicit_user_fields=explicit.get("explicit_user_fields", ()),
             explicit_constraints=explicit_records,
         ).to_dict()
+    game_style_id = final_design.get("game_style_id", visual.get(GAME_STYLE_FIELD))
+    profile = resolve_game_style(game_style_id)
+    game_fragment = None
+    if profile is not None:
+        game_fragment = project_game_style(
+            profile,
+            CharacterDesignContext(
+                explicit_preferences=visual,
+                explicit_rendering_preferences=final_design.get("explicit_rendering_preferences") or {},
+                global_rendering_contract="CONTEMPORARY_COMMERCIAL_GACHA_ANIME",
+            ),
+        )
+    validate_game_style_preference_preservation(
+        game_fragment,
+        CharacterDesignContext(
+            explicit_preferences=visual,
+            explicit_rendering_preferences=final_design.get("explicit_rendering_preferences") or {},
+            global_rendering_contract="CONTEMPORARY_COMMERCIAL_GACHA_ANIME",
+        ),
+    )
     return {
         "character_visual_style": str(final_design.get("character_visual_style", "clean-line contemporary gacha anime")),
         "character_identity": identity,
@@ -2602,6 +2785,7 @@ def _compiler_args(final_design: Mapping[str, Any]) -> dict[str, Any]:
         "style_inheritance_policy": final_design.get("style_inheritance_policy", DEFAULT_STYLE_INHERITANCE_POLICY),
         "visual_specification_contract": contract,
         "explicit_constraints": explicit_records,
+        "game_style_fragment": game_fragment,
         "visual_context_firewall": {name: deepcopy(final_design.get(name)) for name in ("inherit_previous_visuals", "allowed_visual_inheritance", "blocked_context_sources", "visual_context_firewall_applied", "style_inheritance_policy")},
     }
 

@@ -1,0 +1,31 @@
+schema_version: game_style_registry_v1
+profile_version: game_style_profile_v1
+profiles:
+  - id: genshin_impact
+    display_name: Genshin Impact
+    profile: genshin_impact.yaml
+    aliases:
+      - 原神
+      - Genshin
+      - Genshin Impact
+  - id: zenless_zone_zero
+    display_name: Zenless Zone Zero
+    profile: zenless_zone_zero.yaml
+    aliases:
+      - 绝区零
+      - ZZZ
+      - Zenless Zone Zero
+  - id: wuthering_waves
+    display_name: Wuthering Waves
+    profile: wuthering_waves.yaml
+    aliases:
+      - 鸣潮
+      - Wuthering Waves
+      - WuWa
+  - id: neverness_to_everness
+    display_name: Neverness to Everness
+    profile: neverness_to_everness.yaml
+    aliases:
+      - 异环
+      - NTE
+      - Neverness to Everness

@@ -48,6 +48,8 @@ _VISUAL_FIELDS = (
     "semi_realistic_face_bias",
     "western_face_bias",
     "east_asian_face_bias",
+    "game_rendering_style",
+    "game_style_id",
 )
 
 _HISTORY_REFERENCE = r"(?:上一版|上一张|前一个角色|上一个角色|之前(?:的)?(?:角色|版本|设计|那张)?|previous(?:\s+(?:run|design|character|version|image))?|prior(?:\s+(?:run|design|character|version|image))?|last\s+(?:run|design|character|version|image))"

@@ -211,6 +211,7 @@ class InteractionLocalizer:
         "foot_visibility": ("足部可读性", "Foot Visibility"),
         "pose_intent": ("动作意图", "Pose Intent"),
         "pose_family": ("站姿族", "Pose Family"),
+        "game_rendering_style": ("参考游戏画风", "Game Rendering Style"),
     }
 
     def __init__(self, locale: str = "en-US") -> None:
@@ -256,6 +257,7 @@ class InteractionLocalizer:
             "ankle ornament": "踝部配件", "both feet readable": "双脚清晰可读", "toes visible": "脚趾可见", "shoes fully visible": "鞋履完整可见",
             "clean-line contemporary gacha anime": "清线条当代二游动漫", "quiet minimalist anime": "安静极简动漫", "geometric high-contrast anime": "几何高对比动漫",
             "human-anime traits": "人类动漫特征", "subtle fox ears": "细微狐耳特征", "STABLE_OPEN": "稳定开放站姿", "OPEN_PARALLEL_STANCE": "开放平行站姿",
+            "genshin_impact": "原神", "zenless_zone_zero": "绝区零", "wuthering_waves": "鸣潮", "neverness_to_everness": "异环",
             "RELAXED_ASYMMETRIC": "放松不对称站姿", "ONE_FOOT_FORWARD": "单脚前置站姿", "NARROW_SEPARATED_STANCE": "窄幅分腿站姿", "FORWARD_STEP_NON_CROSSING": "前踏但不交叉站姿",
             "supports identity and a grounded playable-character silhouette": "支撑身份与稳固的可玩角色轮廓", "supports the selected contemporary design language": "支撑已选的当代设计语言", "keeps both legs in separate visible lanes": "让双腿保持在分离且可见的区域", "low": "低",
         }
@@ -285,6 +287,8 @@ class InteractionLocalizer:
             title = "视觉偏好" if self.locale == "zh-CN" else "Visual Preferences"
             prompt = "你可以一次说明少数视觉要求，其余按推荐；也可以逐项选择。" if self.locale == "zh-CN" else "State a few visual preferences at once; use recommendations for the rest."
             payload = {"title": title, "prompt": prompt, "variables": [self._visual_field(field) for field in response.options]}
+            payload["game_style_id"] = gate.get("game_style_id")
+            payload["game_style_request"] = gate.get("game_style_request")
         if gate_type in {GateType.CHARACTER_DIRECTION_GATE.value, GateType.ART_DIRECTION_GATE.value}:
             payload = {
                 "title": title,
@@ -311,10 +315,22 @@ class InteractionLocalizer:
         variable = str(field.get("variable", ""))
         title = self._VARIABLE_NAMES.get(variable, (variable, variable))[0 if self.locale == "zh-CN" else 1]
         items = []
-        recommended = str(field.get("recommended"))
+        recommended_value = field.get("recommended")
+        recommended = str(recommended_value)
         for item in field.get("options", []):
-            display, internal = self._value_copy(item.get("value"))
-            is_recommended = str(item.get("id")) == recommended or (str(item.get("value")) == recommended and not any(option.get("is_recommended") for option in items))
+            if variable == "game_rendering_style" and item.get("value") is None:
+                display, internal = (
+                    ("默认现代商业二游", "Default modern commercial gacha")
+                    if self.locale == "zh-CN"
+                    else ("Default modern commercial gacha", "Default modern commercial gacha")
+                )
+            else:
+                display, internal = self._value_copy(item.get("value"))
+            is_recommended = (
+                (variable == "game_rendering_style" and recommended_value is None and item.get("value") is None)
+                or str(item.get("id")) == recommended
+                or (str(item.get("value")) == recommended and not any(option.get("is_recommended") for option in items))
+            )
             items.append({"option_id": str(item.get("id")), "display_title": display, "internal_label": internal, "is_recommended": is_recommended})
         if field.get("locked") is not True:
             custom = self._custom_option(variable=variable).to_dict()
@@ -357,7 +373,14 @@ class InteractionLocalizer:
                     if option.get("is_custom"):
                         option.update(self._custom_option(variable=variable).to_dict())
                     else:
-                        display, internal = self._value_copy(option.get("internal_label"))
+                        if variable == "game_rendering_style" and option.get("internal_label") == "Default modern commercial gacha":
+                            display, internal = (
+                                ("默认现代商业二游", "Default modern commercial gacha")
+                                if self.locale == "zh-CN"
+                                else ("Default modern commercial gacha", "Default modern commercial gacha")
+                            )
+                        else:
+                            display, internal = self._value_copy(option.get("internal_label"))
                         option.update(display_title=display, internal_label=internal)
         return checkpoint
 

@@ -653,6 +653,12 @@ class NaturalLanguageInteractionParser:
         extracted = ExplicitConstraintExtractor().extract(text)
         if "face_aesthetic_profile" in extracted:
             put("face_aesthetic_profile", extracted["face_aesthetic_profile"], source="explicit_user")
+        if "game_rendering_style" in extracted:
+            put(
+                "game_rendering_style",
+                extracted.get("game_style_id") or extracted.get("game_style_request"),
+                source="human_select",
+            )
         return updates
 
     def _partial_delegate(self, text: str, variables: Mapping[str, Any]) -> dict[str, Any] | None:

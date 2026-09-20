@@ -232,6 +232,14 @@ The default is `CONTEMPORARY_COMMERCIAL_GACHA_ANIME`. Character Visual Style mod
 
 Only an explicit Human request may override the rendering style, for example `editorial_fashion_illustration`. Record the source as `explicit_user_preference`; do not infer a rendering override from a character adjective. Prompt priority is: explicit rendering override → global rendering default → Anime Style Constitution → Character Visual Style → character and material design → presentation → detail implementation.
 
+### Optional Game Rendering Style
+
+`game_rendering_style` is an optional rendering specialization derived from reviewed reference profiles. It is not a character template: it changes only HOW the image is rendered, after the mandatory `CONTEMPORARY_COMMERCIAL_GACHA_ANIME` global contract. It never controls character identity, hair, eyes, body, clothing, footwear, palette, sexiness, nonhuman traits, pose, background, or accessories.
+
+The default is `null` and therefore preserves the global contract. `QUICK` and `AI_DECIDE` keep it unset unless the Human explicitly requests a game rendering language. `USER_DECIDE` exposes `参考游戏画风` with Default / Genshin Impact / Zenless Zone Zero / Wuthering Waves / Neverness to Everness / Custom-or-unspecified. All aliases resolve through `runtime/game_style_runtime.py`; callers must not parse profile YAML directly.
+
+The resolver consumes only packaged reviewed profiles under `references/game_styles/`. `StylePromptProjector` emits a bounded rendering delta with provenance metadata and preserves explicit user content and rendering preferences. An unsupported game keeps the original request for audit and falls back to the global style with a non-blocking message. The global Gacha Style Gate, pose rules, anatomy gate, and literal-copy protection remain mandatory.
+
 The default Gacha Rendering Style Gate evaluates the actual image across `anime_style`, `gacha_read`, `rendering_polish`, `face_fidelity`, `material_readability`, `presentation_fit`, `drift_type`, `confidence`, and `result`. It is separate from S1 Anime 2D and from Anatomy Integrity. Do not add ornaments, effects, weapons, UI, or background clutter merely to pass it. Keep design density diverse while requiring a stable commercial rendering medium and sufficient rendering density.
 
 Default drift warnings include fashion editorial, western concept art, graphic or paper-cut poster, sports character sheet, minimalist editorial, Art Nouveau poster, painterly or semi-realistic fantasy, generic concept sheet, 3D, and photorealism. An explicit Human rendering request may choose one of these as an override.
@@ -402,6 +410,9 @@ Text-only pose guidance for the current test character: a full-body adult woman 
 - [pose-and-footwear-diversity.md](references/pose-and-footwear-diversity.md) — soft pose, leg, footwear, hosiery, sensuality, portfolio, asset-role, and Human-authority guidance.
 - [standee-variants.md](references/standee-variants.md) — four-direction same-character standee pose planning, Human selection/Mix, and Canon-preserving generation boundary.
 - [standee-first-scope.md](references/standee-first-scope.md) — core standee assets, optional extensions, presentation types, mode scope, and P8 boundary.
+- [game_styles/registry.yaml](references/game_styles/registry.yaml) — packaged reviewed game-rendering registry and aliases.
+- [GAME_STYLE_PROMPT_DIFF_REPORT.md](GAME_STYLE_PROMPT_DIFF_REPORT.md) — fixed-character five-mode prompt diff.
+- [GAME_STYLE_HUMAN_ACCEPTANCE_V1.md](GAME_STYLE_HUMAN_ACCEPTANCE_V1.md) — prepared manual acceptance scenarios HA-GS-01 through HA-GS-07.
 - [P4_IDENTITY_AND_CONSISTENCY_REPORT.md](P4_IDENTITY_AND_CONSISTENCY_REPORT.md) — current phase report and future-self hunter dry-run.
 - [P5_ANATOMY_INTEGRITY_REPORT.md](P5_ANATOMY_INTEGRITY_REPORT.md) — anatomy QA boundary, runtime states, and targeted test report.
 - [basic.md](examples/basic.md) and [advanced.md](examples/advanced.md) — dry-run examples only; neither calls `$imagegen`.
