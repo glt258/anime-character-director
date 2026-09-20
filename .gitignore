@@ -9,9 +9,65 @@ outputs/
 tmp/
 .cache/
 .env
+.env.*
 *.tmp
 *.log
 
-# Optional local style-reference configuration; real artwork lives outside Git.
+# Local development, Codex, and machine-maintenance artifacts.
+workreport/
+generated_images/
+sessions/
+reports/
+logs/
+cache/
+temp/
+Temp/
+.agents/
+.claude/
+.llm-wiki/
+AGENTS.md
+CLAUDE.md
+/wiki-agent.md
+/wiki-log.md
+/wiki-purpose.md
+/wiki-schema.md
+wiki/wiki-log.md
+/test_discovery_audit_full_regression.md
+
+# Local backend/model configuration and generated integration evidence.
 anime-character-director.local.yaml
+/config/local_*.yaml
 config/anime-character-director.local.yaml
+/docs/LOCAL_*.md
+/docs/*_ACCEPTANCE*.md
+tests/integration/**/results*/
+tests/integration/**/outputs*/
+tests/fixtures/stage6_profiles/
+qa/
+
+# Private holdouts and their answer keys. Public aggregate summaries belong in docs/.
+benchmarks/constraint_extraction_holdout_*/
+**/generation_metadata.json
+**/expected_ground_truth.json
+**/holdout_manifest.json
+**/ground_truth.json
+tests/fixtures/constraint_extraction_v2_benchmark.json
+
+# Internal request drafts, experiment logs, one-off QA reports, and migration audits.
+sources/
+wiki/experiments/
+/wiki/roadmap/current.md
+**/STAGE6*REPORT.md
+**/STAGE6*DIAGNOSTIC.md
+/*_REPORT.md
+/*_DIAGNOSTIC.md
+/*_AUDIT.md
+/*_MIGRATION_AUDIT.md
+/*_ACCEPTANCE*.md
+GAME_STYLE_*_REPORT.md
+GAME_STYLE_*_ACCEPTANCE*.md
+GENERATION_QUALITY_BENCHMARK_V2_REPORT.md
+
+# Never publish local reference artwork.
+references/game_styles/**/reference_images/
+references/game_styles/**/reference_art/

@@ -2,10 +2,10 @@
 title: Anatomy, Pose, and Footwear Constraints
 description: Current hard constraints and review outcomes for pose, anatomy, and footwear.
 tags: [constraint, anatomy, pose, review]
-sources: ["[[SKILL.md]]", "[[references/anatomy-checklist.md]]", "[[src]]", "[[tests]]", "2026-09-15/pose-intent-preservation-v1.md", "runtime/pose_intent_runtime.py"]
+sources: ["[[SKILL.md]]", "[[tests]]", "runtime/pose_intent_runtime.py"]
 updated: 2026-09-15
 type: constraint
-related: ["[[architecture/skill-and-runtime]]", "[[roadmap/current]]"]
+related: ["[[architecture/skill-and-runtime]]"]
 ---
 
 # Anatomy, Pose, and Footwear

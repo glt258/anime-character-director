@@ -25,7 +25,6 @@ MANIFEST_FILENAME = "manifest.json"
 LIBRARY_DIRECTORY = "game_style_references"
 DEFAULT_CONFIG_PATH = Path.home() / ".codex" / "anime-character-director.local.yaml"
 DEFAULT_ASSET_ROOT = Path.home() / ".codex" / "anime-character-director-assets"
-KNOWN_LOCAL_ASSET_ROOT = Path("D:/anime-character-director-assets")
 SUPPORTED_GAME_STYLE_IDS = frozenset(
     {
         "genshin_impact",
@@ -237,10 +236,9 @@ def resolve_asset_root(
     configured = _read_local_asset_root(local_config)
     if configured:
         return configured
-    # WHY: the release workspace has a documented machine-local asset folder;
-    # keep it discoverable while retaining the portable ~/.codex fallback.
-    if (KNOWN_LOCAL_ASSET_ROOT / LIBRARY_DIRECTORY / MANIFEST_FILENAME).is_file():
-        return KNOWN_LOCAL_ASSET_ROOT
+    # WHY: release code must not bake in a developer's machine-specific path;
+    # explicit configuration, environment variables, and the portable default
+    # are the only public resolution mechanisms.
     return DEFAULT_ASSET_ROOT
 
 

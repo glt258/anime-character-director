@@ -9,7 +9,7 @@
   "fixtures": [
     {
       "case": "case-A-young-male",
-      "image": "D:/benchmark/outputs/character_archetype_generalization_v1_20260914/cases/case-A-young-male/generation/generated-v1.png",
+      "image": null,
       "human_observed_style": "western anime-inspired fantasy character art",
       "outfit_family": "desert rogue prince fantasy",
       "body_grammar": "generic heroic anime-fantasy male",
@@ -20,7 +20,7 @@
     },
     {
       "case": "case-B-mature-male",
-      "image": "D:/benchmark/outputs/character_archetype_generalization_v1_20260914/cases/case-B-mature-male/generation/generated-v1.png",
+      "image": null,
       "human_observed_style": "western fantasy brute with anime surface treatment",
       "outfit_family": "long-coat fantasy RPG",
       "body_grammar": "oversized heroic triangle",
@@ -31,7 +31,7 @@
     },
     {
       "case": "case-C-androgynous-female",
-      "image": "D:/benchmark/outputs/character_archetype_generalization_v1_20260914/cases/case-C-androgynous-female/generation/repair-v1.png",
+      "image": null,
       "human_observed_style": "pseudo-oriental fantasy anime concept",
       "outfit_family": "dark pseudo-oriental uniform",
       "body_grammar": "androgynous read partially preserved",
@@ -42,7 +42,7 @@
     },
     {
       "case": "case-D-petite-adult-female",
-      "image": "D:/benchmark/outputs/character_archetype_generalization_v1_20260914/cases/case-D-petite-adult-female/generation/generated-v1.png",
+      "image": null,
       "human_observed_style": "western fashion-illustration anime hybrid",
       "outfit_family": "ornamental fantasy dress",
       "body_grammar": "petite adult retained without obvious child conversion",
@@ -54,7 +54,7 @@
     },
     {
       "case": "case-E-partial-beast-adult",
-      "image": "D:/benchmark/outputs/character_archetype_generalization_v1_20260914/cases/case-E-partial-beast-adult/generation/generated-v1.png",
+      "image": null,
       "human_observed_style": "generic elegant kemonomimi fantasy",
       "outfit_family": "tribal fantasy cloth and boots",
       "body_grammar": "human-dominant with partial beast traits",
@@ -66,7 +66,7 @@
     },
     {
       "case": "case-F-strong-adult-female",
-      "image": "D:/benchmark/outputs/character_archetype_generalization_v1_20260914/cases/case-F-strong-adult-female/generation/generated-v1.png",
+      "image": null,
       "human_observed_style": "western superhero fantasy heroine",
       "outfit_family": "sleeveless armor fantasy",
       "body_grammar": "Amazon warrior with amplified massing",

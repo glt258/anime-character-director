@@ -2,10 +2,10 @@
 title: Human Authority and Lineage
 description: Decision record for keeping final visual selection and approval under explicit human control.
 tags: [decision, human-in-loop, lineage]
-sources: ["[[SKILL.md]]", "[[src]]", "[[references/skill-runtime-contract.md]]"]
+sources: ["[[SKILL.md]]", "[[../references/human-authority.md]]"]
 updated: 2026-09-14
 type: decision
-related: ["[[architecture/skill-and-runtime]]", "[[experiments/benchmark-status]]"]
+related: ["[[architecture/skill-and-runtime]]"]
 ---
 
 # Human Authority

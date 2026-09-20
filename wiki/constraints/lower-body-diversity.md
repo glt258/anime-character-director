@@ -4,9 +4,9 @@ title: Lower-Body Diversity and Grounding
 description: Lower-body coverage, legwear, accessories, footwear, age appropriateness, and actual-image grounding rules.
 aliases: [lower-body design, legwear diversity, footwear diversity]
 tags: [constraint, diversity, anatomy, grounding]
-sources: ["2026-09-14/lower_body_diversity_patch_request.md", "runtime/regional_style_runtime.py", "references/pose-and-footwear-diversity.md"]
+sources: ["runtime/regional_style_runtime.py", "references/pose-and-footwear-diversity.md"]
 updated: 2026-09-14
-related: ["[[architecture/regional-visual-language]]", "[[constraints/anime-style-and-identity]]", "[[experiments/character-archetype-generalization-v1]]"]
+related: ["[[architecture/regional-visual-language]]", "[[constraints/anime-style-and-identity]]"]
 ---
 
 # Lower-Body Diversity and Grounding
@@ -23,4 +23,3 @@ Clearly juvenile characters may use age-appropriate socks, tights, sandals, snea
 
 - [[architecture/regional-visual-language]] — Regional style architecture that carries this design space.
 - [[constraints/anime-style-and-identity]] — Global style and identity constraints.
-- [[experiments/character-archetype-generalization-v1]] — Negative evidence motivating diversity expansion.

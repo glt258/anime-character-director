@@ -7,28 +7,28 @@
   "fixtures": [
     {
       "case": "regional-ab-v2-A",
-      "image": "D:/benchmark/outputs/character_archetype_regional_ab_v2_20260914/case-A-young-male/generated-v1.png",
+      "image": null,
       "human_observation": "crossed legs; possible left/right foot reversal",
       "failure_types": ["LEG_CROSSING_BLOCKING_FAIL"],
       "reference_role": "negative_only"
     },
     {
       "case": "regional-ab-v2-C",
-      "image": "D:/benchmark/outputs/character_archetype_regional_ab_v2_20260914/case-C-androgynous-female/generated-v1.png",
+      "image": null,
       "human_observation": "crossed legs",
       "failure_types": ["LEG_CROSSING_BLOCKING_FAIL"],
       "reference_role": "negative_only"
     },
     {
       "case": "ce-reconstruction-C",
-      "image": "D:/benchmark/outputs/character_archetype_ce_reconstruction_v1_20260915/case-C-androgynous-female/generated-v1.png",
+      "image": null,
       "human_observation": "crossed legs",
       "failure_types": ["LEG_CROSSING_BLOCKING_FAIL"],
       "reference_role": "negative_only"
     },
     {
       "case": "ce-reconstruction-E",
-      "image": "D:/benchmark/outputs/character_archetype_ce_reconstruction_v1_20260915/case-E-partial-beast-adult/generated-v1.png",
+      "image": null,
       "human_observation": "crossed legs",
       "failure_types": ["LEG_CROSSING_BLOCKING_FAIL"],
       "reference_role": "negative_only"

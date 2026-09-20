@@ -2,10 +2,10 @@
 title: Anime Style and Identity Constraints
 description: Style and identity rules that prevent visual drift and keep high-impact choices auditable.
 tags: [constraint, style, identity]
-sources: ["[[SKILL.md]]", "[[references/visual-preference-model.md]]", "[[references/benchmark-spec.md]]", "2026-09-14/regional_visual_language_layer_request.md", "config/anime_style_policy.yaml"]
+sources: ["[[SKILL.md]]", "config/anime_style_policy.yaml", "runtime/regional_style_runtime.py"]
 updated: 2026-09-14
 type: constraint
-related: ["[[architecture/skill-and-runtime]]", "[[experiments/benchmark-status]]"]
+related: ["[[architecture/skill-and-runtime]]"]
 ---
 
 # Anime Style and Identity

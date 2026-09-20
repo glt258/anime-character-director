@@ -4,9 +4,9 @@ title: Regional Visual Language Layer
 description: Three-layer style architecture and actual-image regional critic for commercial anime character design.
 aliases: [RegionalVisualLanguage, regional style]
 tags: [architecture, style, critic, prompt-compiler]
-sources: ["2026-09-14/regional_visual_language_layer_request.md", "SKILL.md", "config/anime_style_policy.yaml", "runtime/regional_style_runtime.py"]
+sources: ["SKILL.md", "config/anime_style_policy.yaml", "runtime/regional_style_runtime.py"]
 updated: 2026-09-14
-related: ["[[architecture/skill-and-runtime]]", "[[constraints/anime-style-and-identity]]", "[[experiments/character-archetype-generalization-v1]]"]
+related: ["[[architecture/skill-and-runtime]]", "[[constraints/anime-style-and-identity]]"]
 ---
 
 # Regional Visual Language Layer
@@ -19,7 +19,7 @@ The default contract is anime-first facial abstraction, restrained facial planes
 
 `PromptCompiler` emits Rendering Foundation, Regional Visual Language, and Character Visual Style in fixed order as natural-language positive and negative constraints. `RegionalStyleCritic` requires an existing actual image plus labeled observations; prompt keywords alone cannot pass. `GachaStyleCritic` keeps the Global stage and requires Global PASS and Regional PASS-equivalent in the final `StyleGateResult`.
 
-The regional diagnostic vocabulary includes western-anime, western-fantasy-concept, western-superhero-anatomy, pseudo-oriental-default, generic-fantasy-RPG, character-sheet-presentation, outfit-family, background-presentation, infantilization, and archetype-shortcut drift. The Outfit Family Ledger records actual-image features and reports repeated grammar across four or more images as a non-blocking diagnostic. The current six archetype images are registered as negative regression metadata only and are never future image references.
+The regional diagnostic vocabulary includes western-anime, western-fantasy-concept, western-superhero-anatomy, pseudo-oriental-default, generic-fantasy-RPG, character-sheet-presentation, outfit-family, background-presentation, infantilization, and archetype-shortcut drift. The Outfit Family Ledger records actual-image features and reports repeated grammar across four or more images as a non-blocking diagnostic. Regression fixtures are metadata-only and are never future image references.
 
 The same ledger now covers lower-body design: exposure strategy, legwear family, leg accessories, foot visibility, footwear, stocking material, heel height, open-toe status, barefoot status, and lower-body asymmetry. Lower-body coverage is not coupled to fanservice. `LowerBodyDesignReview` and actual-image grounding protect adult choice, minor age appropriateness, and fidelity to selected barefoot/legwear/accessory decisions. See [[constraints/lower-body-diversity]].
 
@@ -27,7 +27,7 @@ Leg separation is a separate global anatomy invariant, not a Regional Style rule
 
 The RegionalStyleReview contract now carries expected/perceived language, face/body/outfit/material/presentation match, pseudo-oriental detection, rationale, and explicit drift types. `StrongFemaleRegionalStyleReview` and `MaleRegionalBodyReview` provide archetype-specific body checks; outfit and background ledgers remain repetition penalties, while generic RPG and archetype-shortcut replacement diagnostics catch cliché swaps without overriding user intent.
 
-Provenance is explicit: `default_style_policy`, `explicit_user_selection`, `explicit_user_override`, `benchmark_delegation`, and `migrated_default`. Migration emits `REGIONAL_VISUAL_LANGUAGE_DEFAULT_MIGRATION` metadata with the old artifact version, effective value, timestamp, and later-override flag. The six archetype samples remain `FAIL_REGIONAL_STYLE_GENERALIZATION` negative fixtures, not style references.
+Provenance is explicit: `default_style_policy`, `explicit_user_selection`, `explicit_user_override`, `benchmark_delegation`, and `migrated_default`. Migration emits `REGIONAL_VISUAL_LANGUAGE_DEFAULT_MIGRATION` metadata with the old artifact version, effective value, timestamp, and later-override flag. Negative regression fixtures are not style references.
 
 ## Related
 

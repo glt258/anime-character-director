@@ -69,11 +69,14 @@ def _fixture_library(tmp_path: Path) -> Path:
 
 
 def test_local_asset_root_resolution(tmp_path: Path) -> None:
+    configured = tmp_path / "configured-assets"
+    explicit = tmp_path / "explicit-assets"
+    environment = tmp_path / "environment-assets"
     config = tmp_path / "local.yaml"
-    config.write_text("local_assets:\n  root: D:\\configured-assets\n", encoding="utf-8")
-    assert resolve_asset_root("D:/explicit", env={"ANIME_CHARACTER_DIRECTOR_ASSET_ROOT": "D:/env"}, config_path=config) == Path("D:/explicit")
-    assert resolve_asset_root(env={"ANIME_CHARACTER_DIRECTOR_ASSET_ROOT": "D:/env"}, config_path=config) == Path("D:/env")
-    assert resolve_asset_root(env={}, config_path=config) == Path("D:/configured-assets")
+    config.write_text(f"local_assets:\n  root: {configured.as_posix()}\n", encoding="utf-8")
+    assert resolve_asset_root(str(explicit), env={"ANIME_CHARACTER_DIRECTOR_ASSET_ROOT": str(environment)}, config_path=config) == explicit
+    assert resolve_asset_root(env={"ANIME_CHARACTER_DIRECTOR_ASSET_ROOT": str(environment)}, config_path=config) == environment
+    assert resolve_asset_root(env={}, config_path=config) == configured
 
 
 def test_reference_manifest_schema() -> None:
@@ -353,8 +356,3 @@ def test_debug_trace_contains_reference_selection(tmp_path: Path) -> None:
     trace = bundle["game_style_debug_trace"]["reference_conditioning"]
     assert trace["reference_bundle"]["max_images_used"] == DEFAULT_MAX_IMAGES
     assert trace["reference_bundle"]["references"][0]["absolute_path"]
-
-
-def test_c_runtime_untouched() -> None:
-    """The release repository is the only implementation boundary for this task."""
-    assert Path(__file__).parents[1].resolve() == Path("D:/anime-character-director-release").resolve()

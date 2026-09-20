@@ -2,7 +2,7 @@
 
 `anime-character-director` is one Codex Skill with three top-level creation modes. Repair, variant, same-character, and critique are post-generation actions, not creation modes.
 
-Interaction System v1 and Persistent Interactive Workflow Runner v1 are `ACCEPTED / FROZEN`. The accepted production baseline for the current interaction scope is recorded in [Three-Mode Interaction System v1 Acceptance](../docs/THREE_MODE_INTERACTION_V1_ACCEPTANCE.md).
+Interaction System v1 and Persistent Interactive Workflow Runner v1 are the documented production baseline for the current interaction scope. Their contracts are described in [Interaction System](../docs/INTERACTION_SYSTEM.md) and [Persistent Interactive Workflow](../docs/PERSISTENT_INTERACTIVE_WORKFLOW.md).
 
 | Mode | Goal | Exploration | Gate strategy | End state |
 |---|---|---|---|---|

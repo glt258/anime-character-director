@@ -1,14 +1,14 @@
 ---
 title: Generation Quality Benchmark v2 Summary
-description: Internal release evidence for the three public creation modes.
+description: Public aggregate benchmark summary for the three public creation modes.
 type: benchmark-summary
-status: COMPLETE_WITH_REPLAYED_USER_DECIDE_DISCLOSURE
+status: PUBLISHED_AGGREGATE_SUMMARY
 updated: 2026-09-16
 ---
 
 # Generation Quality Benchmark v2 Summary
 
-This is internal release evidence for the public `anime-character-director v1.1.0` documentation release. It is not required knowledge for normal Skill use.
+This document publishes aggregate metrics only. Detailed prompts, manifests, per-sample evidence, and generated outputs are intentionally excluded from the public repository.
 
 ## Scope
 
@@ -40,7 +40,7 @@ This is internal release evidence for the public `anime-character-director v1.1.
 
 ## USER_DECIDE disclosure
 
-The four USER_DECIDE comparison rows use `replayed previously recorded real-human selections under the frozen runtime`. They are not four new live native-UI sessions in this release run. Native UI authenticity is covered by the separate interaction acceptance evidence and runtime tests.
+The four USER_DECIDE comparison rows use `replayed previously recorded real-human selections under the frozen runtime`. They are not four new live native-UI sessions in this release run.
 
 ## Constraint evidence
 
@@ -55,10 +55,3 @@ It does not promote `pink` or `long hair` into positive character fields. Positi
 ## LoRA and research boundary
 
 `LORA_NOT_PRIMARY_BOTTLENECK`. v1.1.0 does not automatically resume step1000, retrain, recollect data, or change captions. Global diversity, hair/outfit prior analysis, pose vocabulary expansion, and broader 20–30 character benchmarks are `POST_V1` research.
-
-## Source artifacts
-
-- Full report: `D:/benchmark/outputs/three_mode_generation_quality_v2_20260915/GENERATION_QUALITY_BENCHMARK_V2_REPORT.md`
-- Mode comparison: `D:/benchmark/outputs/three_mode_generation_quality_v2_20260915/mode_comparison.md`
-- Constraint audit: `D:/benchmark/outputs/three_mode_generation_quality_v2_20260915/post_fix_mode_comparison_20260916/audit/USER_DECIDE_POST_FIX_COMPARABILITY_AUDIT.md`
-- Runtime freeze: `D:/benchmark/outputs/three_mode_generation_quality_v2_20260915/post_fix_mode_comparison_20260916/benchmark_runtime_freeze_20260916.md`

@@ -1,7 +1,7 @@
-# Copy to %USERPROFILE%\.codex\anime-character-director.local.yaml and edit.
+# Copy to %USERPROFILE%\.codex\anime-character-director.local.yaml and set the local asset root.
 # Do not commit the real local config or any local reference images.
 local_assets:
-  root: D:\anime-character-director-assets
+  root: "<local-asset-root>"
 
 # Optional v1 conditioning controls. Real artwork and this local config stay outside Git.
 local_references:

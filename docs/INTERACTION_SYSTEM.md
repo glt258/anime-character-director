@@ -8,18 +8,18 @@ created: 2026-09-15
 updated: 2026-09-15
 tags: [interaction, session, modes, gates, architecture]
 sources: ["[[SKILL.md]]", "[[references/creative-modes.md]]", "[[references/workflow.md]]"]
-related: ["[[architecture/skill-and-runtime]]", "[[decisions/human-authority]]", "[[roadmap/current]]"]
+related: ["[[architecture/skill-and-runtime]]", "[[decisions/human-authority]]"]
 ---
 
 # Interaction System v1
 
-The resolver/session contract described here remains the accepted base layer. The product-level continuation wrapper is documented in [Persistent Interactive Workflow Runner v1](PERSISTENT_INTERACTIVE_WORKFLOW.md) and passed Human Acceptance v1.
+The resolver/session contract described here remains the accepted base layer. The product-level continuation wrapper is documented in [Persistent Interactive Workflow Runner v1](PERSISTENT_INTERACTIVE_WORKFLOW.md).
 
 ## Scope
 
 This phase adds a persistent orchestration layer to the existing Codex Skill. It is not a GUI, Web UI, standalone agent, external chat product, or image API. The phase ends at `GENERATION_READY`; it does not call `$imagegen` or generate images.
 
-The default mode is `AI_DECIDE`. Explicit modes and obvious natural-language hints are preferred; unreliable or ambiguous hints fall back to the default. Interaction System v1 is `ACCEPTED / FROZEN` for the current scope; see [Three-Mode Interaction System v1 Acceptance](THREE_MODE_INTERACTION_V1_ACCEPTANCE.md).
+The default mode is `AI_DECIDE`. Explicit modes and obvious natural-language hints are preferred; unreliable or ambiguous hints fall back to the default. Interaction System v1 is `ACCEPTED / FROZEN` for the current scope.
 
 ## Three modes
 

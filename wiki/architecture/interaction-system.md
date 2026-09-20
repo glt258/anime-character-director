@@ -6,7 +6,7 @@ sources: ["[[../docs/INTERACTION_SYSTEM.md]]", "[[SKILL.md]]", "runtime/interact
 updated: 2026-09-16
 type: architecture
 status: ACCEPTED / FROZEN
-related: ["[[skill-and-runtime]]", "[[../decisions/human-authority]]", "[[../roadmap/current]]"]
+related: ["[[skill-and-runtime]]", "[[../decisions/human-authority]]"]
 ---
 
 # Interaction System v1
@@ -29,4 +29,3 @@ The accepted base interaction contract remains `THREE_MODE_INTERACTION_SYSTEM_V1
 
 - [[skill-and-runtime]] — runtime ownership and the shared design workflow
 - [[../decisions/human-authority]] — provenance and human override priority
-- [[../roadmap/current]] — current implementation state and next review boundary

@@ -406,7 +406,7 @@ Text-only pose guidance for the current test character: a full-body adult woman 
 - [../docs/PERSISTENT_INTERACTIVE_WORKFLOW.md](docs/PERSISTENT_INTERACTIVE_WORKFLOW.md) — WorkflowRun, checkpoints, continuation, restart, Custom, and locale integration.
 - [human-authority.md](references/human-authority.md) — Human Authority Contract, technical/aesthetic review, lineage, and decisions.
 - [design-ownership.md](references/design-ownership.md) — Design Ownership Policy, variable classes, Visual Preference Gate, diversity rules, and Human Audit Policy.
-- [../docs/VISUAL_PREFERENCE_REPORT.md](../docs/VISUAL_PREFERENCE_REPORT.md) — JSON/report artifact format.
+- [docs/VISUAL_PREFERENCE_REPORT.md](docs/VISUAL_PREFERENCE_REPORT.md) — JSON/report artifact format.
 - [pose-and-footwear-diversity.md](references/pose-and-footwear-diversity.md) — soft pose, leg, footwear, hosiery, sensuality, portfolio, asset-role, and Human-authority guidance.
 - [standee-variants.md](references/standee-variants.md) — four-direction same-character standee pose planning, Human selection/Mix, and Canon-preserving generation boundary.
 - [standee-first-scope.md](references/standee-first-scope.md) — core standee assets, optional extensions, presentation types, mode scope, and P8 boundary.
@@ -414,11 +414,4 @@ Text-only pose guidance for the current test character: a full-body adult woman 
 - [local_style_references/README.md](references/local_style_references/README.md) — optional local-only character-art reference library and resolver CLI.
 - [local_style_references/STYLE_REFERENCE_CONTRACT.md](references/local_style_references/STYLE_REFERENCE_CONTRACT.md) — explicit-user-constraint priority and anti-cloning contract.
 - [REFERENCE_CONDITIONING_INTEGRATION_V1.md](REFERENCE_CONDITIONING_INTEGRATION_V1.md) — YAML plus local-reference generation handoff, fallback, and observability.
-- [QA_AB_TEST_PLAN_REFERENCE_CONDITIONING_V1.md](QA_AB_TEST_PLAN_REFERENCE_CONDITIONING_V1.md) — A/B and Human Acceptance v3 preparation.
-- [GAME_STYLE_PROMPT_DIFF_REPORT.md](GAME_STYLE_PROMPT_DIFF_REPORT.md) — fixed-character five-mode prompt diff.
-- [GAME_STYLE_PROMPT_DIFF_REPORT_V2.md](GAME_STYLE_PROMPT_DIFF_REPORT_V2.md) — structured v2 fixed-character five-mode prompt diff.
-- [qa/game_style_v2/GAME_STYLE_WEAKNESS_DIAGNOSIS.md](qa/game_style_v2/GAME_STYLE_WEAKNESS_DIAGNOSIS.md) — v1 weakness diagnosis and v2 acceptance boundary.
-- [GAME_STYLE_HUMAN_ACCEPTANCE_V1.md](GAME_STYLE_HUMAN_ACCEPTANCE_V1.md) — prepared manual acceptance scenarios HA-GS-01 through HA-GS-07.
-- [P4_IDENTITY_AND_CONSISTENCY_REPORT.md](P4_IDENTITY_AND_CONSISTENCY_REPORT.md) — current phase report and future-self hunter dry-run.
-- [P5_ANATOMY_INTEGRITY_REPORT.md](P5_ANATOMY_INTEGRITY_REPORT.md) — anatomy QA boundary, runtime states, and targeted test report.
 - [basic.md](examples/basic.md) and [advanced.md](examples/advanced.md) — dry-run examples only; neither calls `$imagegen`.

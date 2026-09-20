@@ -2,11 +2,11 @@
 title: Pose Intent Preservation
 description: Separate body-language intent from hard leg safety and validate both on actual-image evidence.
 tags: [architecture, pose, runtime, gate]
-sources: ["2026-09-15/pose-intent-preservation-v1.md", "runtime/pose_intent_runtime.py", "runtime/regional_style_runtime.py", "SKILL.md"]
+sources: ["runtime/pose_intent_runtime.py", "runtime/regional_style_runtime.py", "SKILL.md"]
 updated: 2026-09-15
 type: architecture
 status: ACCEPTED / FROZEN
-related: ["[[architecture/skill-and-runtime]]", "[[constraints/anatomy-pose-and-footwear]]", "[[roadmap/current]]"]
+related: ["[[architecture/skill-and-runtime]]", "[[constraints/anatomy-pose-and-footwear]]"]
 ---
 
 # Pose Intent Preservation
@@ -21,9 +21,9 @@ Supported intent types are `ELEGANT`, `SENSUAL`, `RELAXED_ASYMMETRIC`, `LOW_ENER
 
 If leg safety passes but intent fails, a bounded pose-intent-only repair may change body language, stance width, foot depth, torso, shoulders, arms, head, and energy only. It preserves character identity, outfit, palette, body build, footwear, regional style, and background direction, then reruns the leg gate. `PoseDiversityLedger` records actual pose features and reports non-blocking `SAFE_POSE_HOMOGENIZATION` when different names resolve to materially identical body language.
 
-## Pose System v1 acceptance
+## Scope boundary
 
-Human Review approved the combined pose system as `ACCEPTED / FROZEN` for the current fast-generation production baseline. The real-image validation achieved 6/6 no-crossed-legs, 6/6 Leg Safety PASS, retained Pose Intent, and no obvious safe-pose homogenization without automatic repair or cherry-pick. This is an evidence-scoped baseline, not a claim that every future pose problem is completely solved.
+The combined pose system is part of the current fast-generation production baseline. This is a contract boundary, not a claim that every future pose problem is completely solved.
 
 Future detailed pose refinement belongs to an explicitly requested Detailed Design / Repair stage. Ordinary character-design experiments must not casually alter the crossed-leg policy, leg contract, pose-intent semantics, gate thresholds, or diversity logic unless a clear regression or blocker is found.
 
@@ -31,4 +31,3 @@ Future detailed pose refinement belongs to an explicitly requested Detailed Desi
 
 - [[architecture/skill-and-runtime]] — overall Skill/runtime boundary.
 - [[constraints/anatomy-pose-and-footwear]] — hard leg safety and pose review boundary.
-- [[roadmap/current]] — current implementation and follow-up state.

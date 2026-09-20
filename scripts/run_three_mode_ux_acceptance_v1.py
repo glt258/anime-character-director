@@ -55,7 +55,9 @@ def normalize_provenance(value: Any) -> ProvenanceSemanticClass:
     return _PROVENANCE_SEMANTICS.get(str(value).strip().casefold(), ProvenanceSemanticClass.UNKNOWN)
 
 
-OUTPUT_ROOT = Path("D:/benchmark/outputs/three_mode_interaction_ux_acceptance_v1_20260915")
+# Keep generated acceptance evidence under the ignored repository output root;
+# a public script must not encode one developer's drive or workspace path.
+OUTPUT_ROOT = ROOT / "outputs" / "three_mode_interaction_ux_acceptance_v1_20260915"
 
 
 def dump(path: Path, value: Any) -> None:

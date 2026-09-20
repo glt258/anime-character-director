@@ -8,7 +8,7 @@ created: 2026-09-15
 updated: 2026-09-15
 tags: [interaction, workflow, persistence, checkpoints, locale]
 sources: ["[[SKILL.md]]", "[[../references/workflow.md]]", "runtime/workflow_runner.py"]
-related: ["[[INTERACTION_SYSTEM]]", "[[THREE_MODE_INTERACTION_V1_ACCEPTANCE]]", "[[../roadmap/current]]"]
+related: ["[[INTERACTION_SYSTEM]]"]
 ---
 
 # Persistent Interactive Workflow Runner v1
@@ -61,12 +61,10 @@ An explicitly authorized targeted visual repair is a post-generation action on t
 
 The runner uses temporary-file replacement for `workflow_run.json`, while the existing session runtime uses the same atomic-save pattern for `session.json`. A fresh `PersistentWorkflowRunner` pointed at the same session root can load the run and continue it without any user-visible restart ceremony.
 
-## Acceptance boundary
+## Boundary
 
-Persistent Interactive Workflow v1 remains `PERSISTENT_INTERACTIVE_WORKFLOW_V1_ACCEPTED` / `ACCEPTED / FROZEN`. Native interaction integration is part of the v1.0.0 release; benchmark generation is historical release evidence and does not start automatically. Pose System v1 remains `ACCEPTED / FROZEN` and is not changed by this layer.
+Persistent Interactive Workflow v1 ends at `GENERATION_READY`. It owns checkpoint persistence and continuation; image generation and post-generation review remain separate Skill stages.
 
 ## Related
 
 - [[INTERACTION_SYSTEM]] — shared pipeline, resolver, provenance, and hard-rule ownership
-- [[THREE_MODE_INTERACTION_V1_ACCEPTANCE]] — accepted pre-run interaction baseline
-- [[../roadmap/current]] — next Human Acceptance boundary
