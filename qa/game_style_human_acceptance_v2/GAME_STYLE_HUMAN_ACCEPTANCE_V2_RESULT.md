@@ -37,6 +37,7 @@ v1 的主要问题不是游戏名缺失，而是 runtime projection 的 renderin
 - 新增 v2 tests：28 个；`tests/test_game_style_v2.py` 与既有 Game Style tests：`74 passed`。
 - checkpoint/BACK、preference preservation：`38 passed`。
 - workflow 与 targeted regression：`69 passed`。
+- `py -3 -m py_compile runtime/game_style_runtime.py runtime/regional_style_runtime.py runtime/interaction_runtime.py tests/test_game_style_v2.py`：PASS。
 - `py -3 -m compileall -q runtime tests`：PASS。
 - `git diff --check`：PASS（v1 历史报告的 Markdown hard-break 空格未改动）。
 - failures：0。
