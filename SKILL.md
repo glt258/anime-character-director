@@ -365,6 +365,32 @@ The runtime currently exposes text-to-image generation as an external Skill hand
 
 The implementation lives in `runtime/interaction_runtime.py` and reuses `runtime/visual_preference_runtime.py` plus `runtime/regional_style_runtime.py`. Final prompt compilation is allowed only after the selected mode's resolution strategy has produced a complete design. `GENERATION_READY` means the `PromptBundle` is valid and ready for the Skill's later `$imagegen` phase; it is not itself a generated asset or Human aesthetic approval.
 
+For every normal new-character generation in `QUICK`, `AI_DECIDE`, or `USER_DECIDE`, apply the following only at the Skill-to-ImageGen handoff. This does not change mode resolution, `DesignDNA`, `BackgroundDNA`, or non-background content in the compiled `PromptBundle`.
+
+- If the current user has not explicitly requested a rendered scene/background (including a concrete scene selected by the Human in the current run), call built-in `$imagegen` with `transparent_background: true`. Request PNG output and preserve the returned Alpha channel. AI-resolved `BackgroundDNA` alone is not an explicit scene request. Keep the complete character intact; omit or replace only the compiled scene/environment/architecture/spatial-layout/atmosphere/background-lighting/ground/depth/complexity backdrop clauses with: “Preserve the complete character as the foreground subject on a genuinely transparent background; no scene, ground plane, background color or shape, panel, gradient, checkerboard, or cast shadow.” Leave every non-background prompt clause unchanged.
+- If the current user explicitly requests a rendered nontransparent scene/background, honor it and call built-in `$imagegen` with `transparent_background: false`, preserving that requested scene in the prompt.
+- Never substitute white, black, another solid color, or checkerboard pixels for transparency.
+
+Before reporting a transparent PNG as successful, inspect the actual file's pixels, not its extension, the ImageGen argument, or its visual preview alone. Use Pillow or an already available pixel reader to inspect the actual PNG: verify `Image.format == "PNG"`, an alpha band or equivalent palette transparency exists, and the decoded alpha channel has minimum `0` and a maximum greater than `0`; separately confirm that the character body remains visually intact and normally opaque. Sample alpha at all four corners and several visibly empty pixels outside the character silhouette; every sample must equal `0`. A minimal Pillow check is:
+
+```python
+from PIL import Image
+
+image_path = r"<exact path returned by ImageGen>"
+with Image.open(image_path) as image:
+    assert image.format == "PNG"
+    assert "A" in image.getbands() or "transparency" in image.info
+    alpha = image.convert("RGBA").getchannel("A")
+    alpha_minimum, alpha_maximum = alpha.getextrema()
+    assert alpha_minimum == 0
+    assert alpha_maximum > 0
+    width, height = image.size
+    outside_samples = [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)]
+    assert all(alpha.getpixel(point) == 0 for point in outside_samples)
+```
+
+After visually identifying other empty areas outside the silhouette, add those pixel coordinates to `outside_samples` and verify their alpha is also `0`. Confirm the character remains visibly intact and inspect its edges for obvious background residue. A failed or unverifiable check is `FAIL`/`NOT_VERIFIED`; do not report it as a qualified transparent PNG. Keep this technical file check separate from character-design gates. Do not flatten or fake transparency and do not redesign or re-render a character to repair an opaque result. When applying the existing visual critic to a default transparent cutout, do not count AI-only `BackgroundDNA` scene details as required rendered content; keep any explicit Human-selected scene subject to its existing review, and verify alpha separately.
+
 ## VISUAL SPECIFICATION CONTRACT / PROMPT ADHERENCE
 
 Before prompt compilation, Final Design is converted into a `VisualSpecificationContract`. `HARD` fields lock structural choices (silhouette, hair, horns, costume, exposure, legwear, footwear, pose, wings, and tail); `STRONG` fields carry palette, materials, accessories, body-line emphasis, background, and visual style; `SOFT` fields carry semantic intent only. Identity/archetype never supplies missing visual structure.
